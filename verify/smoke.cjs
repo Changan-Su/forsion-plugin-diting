@@ -35,6 +35,8 @@ const SHOTS = path.join(HERE, '.shots'); fs.mkdirSync(SHOTS, { recursive: true }
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
 const freePort = () => new Promise((r) => { const s = net.createServer(); s.listen(0, '127.0.0.1', () => { const p = s.address().port; s.close(() => r(p)) }) })
 const results = []
+// 被测的桌面有没有专门的翻译口子(ctx.tangu.translate):有 → 谛听默认逐句只翻译;没有(2.13.3 及更早)→ 照旧翻译 + 纠正一起做。
+const HOST_SEAM = /\btranslate\?\(req:/.test(fs.readFileSync(path.join(DESK, 'frontend/src/amadeus/plugins/types.ts'), 'utf8'))
 const ok = (name, pass, detail = '') => { results.push({ name, pass: !!pass }); console.log(`${pass ? '✓' : '✗'} ${name}${detail ? `  — ${detail}` : ''}`) }
 
 const LINES = ['今天我们讲二能级原子和辐射场的相互作用。', '先把电场写成一个单色的平面波。', '然后我们需要做一个近似,叫做旋转波近似。', '这样方程里只剩下缓慢变化的那一项。', '最后得到的振荡频率叫做拉比频率。']
@@ -109,8 +111,12 @@ async function main() {
       }
       const sel = String(body.selection || '')
       if (String(body.instruction || '').includes('"chapters"')) return sse(JSON.stringify({ lead: '这一讲讲了二能级原子和辐射场。', points: [{ t: '00:02', text: '把电场写成单色平面波' }, { t: '00:09', text: '旋转波近似' }], todos: [], terms: [{ term: '拉比频率', meaning: '布居数振荡的频率', t: '00:15' }], chapters: [{ t: '00:00', title: '开场' }, { t: '00:09', title: '旋转波近似' }] }))
+      // 宿主的翻译口子(引擎的 translate 动作):只回译文,不带标签
+      if (body.action === 'translate') return sse(`EN: ${sel}`)
       // 顺手「改」一个词,验「按上下文改错」那条路
-      return sse(`<source>${sel.replace('今天', '今日')}</source>\n<translation>EN: ${sel}</translation>`)
+      // (哪一句都要能「改」到:含「今天」的换成「今日」,别的句子换掉第一个字)
+      const fixedSel = sel.includes('今天') ? sel.replace('今天', '今日') : sel.replace(/^./u, (c) => (c === '这' ? '那' : '这'))
+      return sse(`<source>${fixedSel}</source>\n<translation>EN: ${sel}</translation>`)
     },
   })
 
@@ -161,7 +167,7 @@ async function main() {
       await win.evaluate(() => document.querySelector('.rb-open-top .rb-more')?.click()); await win.waitForTimeout(1200)
     }
     const T = (fn, arg) => win.evaluate(fn, arg)
-    const state = () => T(() => { const t = window.__DITING_TEST__; const r = t.S.live; return { phase: t.S.phase, seconds: t.S.seconds, segs: r ? r.segments.length : -1, texts: r ? r.segments.map((s) => s.text) : [], tr: r ? r.segments.filter((s) => s.trState === 'done').length : 0, fixed: r ? r.segments.filter((s) => s.raw).length : 0, notes: r ? r.notes.map((n) => n.text) : [], error: t.S.error, hidden: document.visibilityState, healed: t.S.healed, index: t.S.index.map((x) => `${x.id}:${x.status}`) } })
+    const state = () => T(() => { const t = window.__DITING_TEST__; const r = t.S.live; return { phase: t.S.phase, seconds: t.S.seconds, segs: r ? r.segments.length : -1, texts: r ? r.segments.map((s) => s.text) : [], tr: r ? r.segments.filter((s) => s.trState === 'done').length : 0, trs: r ? r.segments.map((s) => s.tr || '') : [], fixed: r ? r.segments.filter((s) => s.raw).length : 0, notes: r ? r.notes.map((n) => n.text) : [], error: t.S.error, hidden: document.visibilityState, healed: t.S.healed, index: t.S.index.map((x) => `${x.id}:${x.status}`) } })
     const until = async (what, fn, ms = 30_000) => { const end = Date.now() + ms; for (;;) { const s = await state(); if (fn(s)) return s; if (Date.now() > end) throw new Error(`等不到:${what} — ${JSON.stringify(s)}`); await sleep(400) } }
 
     await enter('谛听')
@@ -179,6 +185,20 @@ async function main() {
     ok('麦克风 → 切句 → 识别', first.segs >= 2, first.texts.slice(0, 2).join(' / '))
     const tr = await until('翻译出来', (s) => s.tr >= 1, REAL ? 60_000 : 20_000).then((s) => s, () => null)
     ok(REAL ? '翻译(真模型)' : '翻译(假引擎回话)', !!tr, `一次性补全被调了 ${inline.length} 次`)
+    if (!REAL) {
+      const shown = (tr ? tr.trs : []).filter(Boolean)
+      const calls = inline.filter((b) => !String(b.instruction || '').includes('"chapters"'))
+      if (HOST_SEAM) {
+        ok('翻译走宿主的翻译口子:引擎收到的是 translate 动作 + 目标语言,显示的只有译文', calls.length > 0 && calls.every((b) => b.action === 'translate' && b.language === 'English' && b.selection) && shown.length > 0 && shown.every((x) => x.startsWith('EN: ') && !x.includes('<')), `${calls.length} 次;第一句:${shown[0] || ''}`)
+        ok('默认不改原文(「顺带纠正」关着)', tr && tr.fixed === 0)
+        // 打开「翻译时顺带纠正听错的词」:后面的句子回到聊天模型那条(按固定格式回话、原文被改正)
+        await T(() => { localStorage.setItem('plugin.diting.fix', 'true') })
+        const fx = await until('打开纠正后有句子被改', (s) => s.fixed >= 1, 40_000).then((s) => s, () => null)
+        ok('打开「顺带纠正」后回到聊天模型那条', !!fx && inline.some((b) => b.action === 'custom' && String(b.instruction || '').includes('<translation>')) && fx.trs.filter(Boolean).every((x) => !x.includes('<')), fx ? `改了 ${fx.fixed} 句` : '')
+      } else {
+        ok('旧宿主没有翻译口子:照旧一次调用里翻译 + 纠正', calls.length > 0 && calls.every((b) => b.action === 'custom') && shown.length > 0 && shown.every((x) => x.startsWith('EN: ') && !x.includes('<')), `${calls.length} 次;第一句:${shown[0] || ''}`)
+      }
+    }
     await shot('02-live')
 
     // ② 后台:三种「不在眼前」
