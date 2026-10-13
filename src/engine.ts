@@ -51,6 +51,7 @@ async function recognize(u: Utterance): Promise<string> {
   const fn = window.tangu?.transcribeAudio
   if (!fn) throw new Error('speech recognition is not available in this window')
   // 识别一直不回来(云端卡住)时不能把后面的句子全堵死。
+  // ponytail: 这是兜底用的定时器,不推采集和转写;窗口隐藏时它会被降频,45 秒可能拖到一两分钟才到,只是晚一点放行。
   const r = await Promise.race([fn({ audioBase64: base64(wavBytes(u.pcm, RATE)), mime: 'audio/wav' }), sleep(45_000).then(() => { throw new Error(TIMEOUT) })])
   return (typeof r === 'string' ? r : r?.text || '').trim()
 }
