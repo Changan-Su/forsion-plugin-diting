@@ -151,8 +151,10 @@ try {
       tangu: { complete: async () => { await gate; return { text: '<source>今天讲拉比频率。</source><translation>T</translation>' } } },
       notify() {},
     }
-    await build({ stdin: { contents: `export * as E from './src/engine'; export * as St from './src/store'; export { S } from './src/state'`, resolveDir: process.cwd(), loader: 'ts' }, bundle: true, format: 'esm', outfile: join(dir, 'owner.mjs'), logLevel: 'silent' })
-    const { E, St, S } = await load('owner.mjs')
+    await build({ stdin: { contents: `export * as E from './src/engine'; export * as St from './src/store'; export { S, prefs } from './src/state'`, resolveDir: process.cwd(), loader: 'ts' }, bundle: true, format: 'esm', outfile: join(dir, 'owner.mjs'), logLevel: 'silent' })
+    const { E, St, S, prefs } = await load('owner.mjs')
+    assert.equal(prefs().target, '')
+    n++; console.log('✓ 翻译默认关(没选过语言的人不会一装上就每句调用模型)')
     const seed = (id, extra = {}) => {
       const folder = `谛听/${id}`
       const rec = { ...M.newRec({ id, folder, title: id, now: new Date('2026-10-01T08:00:00Z'), source: 'mic', target: '' }), status: 'done', segments: [{ id: 1, start: 0, end: 2, text: '今天讲拉比频率。' }], ...extra }

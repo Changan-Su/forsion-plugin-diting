@@ -1,7 +1,7 @@
 {
   "name": "forsion-plugin-diting",
   "private": true,
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "谛听:Forsion 的实时转写与记录插件(边说边出字、逐句翻译、过程中提问、结束后出纪要;构建源,产物 main.js 已提交)",
   "type": "module",
   "scripts": {

@@ -1,7 +1,6 @@
 // 这个窗口里的状态和偏好。主窗口里由录音引擎直接改;小窗 / 分出去的窗口里由 sync.ts 照着主窗口的快照改。
 // 视图只读这里、只订阅这里,不关心自己在哪个窗口。
 
-import { getLocale } from './i18n'
 import type { IndexRow, Layout, Rec, SummaryStyle } from './model'
 
 export type Phase = 'idle' | 'starting' | 'live' | 'paused' | 'stopping' | 'importing'
@@ -42,7 +41,8 @@ export function emit(): void { for (const fn of [...subs]) { try { fn() } catch 
 // 偏好:和宿主 registerSetting 同一个键名口径(plugin.<id>.<key>),所以别的窗口改了这边也读得到。
 const PREF = 'plugin.diting.'
 export interface Prefs { layout: Layout; display: 'stacked' | 'paired' | 'original'; target: string; keep: boolean; partial: 'auto' | 'on' | 'off'; autoSummary: boolean; style: SummaryStyle; terms: Record<string, string> }
-const DEFAULTS = (): Prefs => ({ layout: 'transcript', display: 'stacked', target: getLocale(), keep: true, partial: 'auto', autoSummary: true, style: 'class', terms: {} })
+// 翻译默认关:开着的话每句都要调用一次模型,该由用户自己选了语言才开始花这份钱。
+const DEFAULTS = (): Prefs => ({ layout: 'transcript', display: 'stacked', target: '', keep: true, partial: 'auto', autoSummary: true, style: 'class', terms: {} })
 
 export function prefs(): Prefs {
   const d = DEFAULTS(); const out = { ...d } as Record<string, unknown>

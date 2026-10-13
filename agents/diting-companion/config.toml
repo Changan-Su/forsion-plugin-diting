@@ -1,7 +1,7 @@
 # 谛听随包带的 Agent。文件夹名 = slug。version 要带引号(市场更新检查用正则读)。
 # 它只读记录文件夹里的文件来回答问题,不需要别的工具;提示词是给模型读的,所以是英文。
 name = "谛听"
-version = "0.1.0"
+version = "0.1.1"
 description = "回答关于一次记录的问题：它会去读这次记录的转写、笔记和纪要，只按里面写了的回答，并标出时间。"
 model_reasoning_effort = "low"
 created_by = "user"
