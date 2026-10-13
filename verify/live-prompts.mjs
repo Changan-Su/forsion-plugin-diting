@@ -4,7 +4,9 @@
  * 用插件自己的解析函数去读回话;② 随包的「谛听」Agent 在一次记录的文件夹里回答问题(会不会去读转写、转写变长了会不会重读、
  * 没讲过的会不会编)。假引擎只证「接对了」,这里证「模型照不照着做」。
  *
- *   node verify/live-prompts.mjs [--model codex/gpt-6-luna] [--out <产物目录>] [--rounds 1] [--only translate,summary,chat]
+ *   node verify/live-prompts.mjs [--model codex/gpt-6-luna] [--out <产物目录>] [--rounds 1] [--only translate,seam,summary,chat] [--engine <tangu-agent 目录>]
+ *
+ * seam = 宿主的 ctx.tangu.translate 走的那条(引擎自带的 translate 动作,不是插件的提示词):逐句只要译文,看它会不会多说话。
  *
  * 真烧订阅额度(每轮约十次小调用)。凭证软链 ~/.forsion-dev/provider-auth.json(引擎自己读,本脚本不读);
  * 引擎用隔离的家目录,不碰本机的对话库。要求同级有 Forsion-Genesis/tangu-agent 且已 npm run build。
@@ -24,7 +26,7 @@ const HERE = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 const opt = (name, def) => { const i = process.argv.indexOf(`--${name}`); return i > 0 ? process.argv[i + 1] : def }
 const MODEL = opt('model', 'codex/gpt-6-luna')
 const ROUNDS = Number(opt('rounds', '1'))
-const ONLY = opt('only', '') // translate,summary,chat 里挑;不给 = 全跑
+const ONLY = opt('only', '') // translate,seam,summary,chat 里挑;不给 = 全跑
 const want = (k) => !ONLY || ONLY.split(',').includes(k)
 const ENGINE = resolve(opt('engine', join(HERE, '../../Forsion-Genesis/tangu-agent')))
 const AUTH = resolve(opt('auth', join(homedir(), '.forsion-dev', 'provider-auth.json')))
@@ -149,6 +151,21 @@ try {
       out.push(`[${c.key}] ${r.ms}ms${r.error ? ` ERROR ${r.error}` : ''}\n原句:${c.sel}\n回话:${r.content}\n→ 译文:${tr || '(没取到)'}\n→ 改动:${accepted ? `收(${JSON.stringify(M.changes(c.sel, src))})` : src && src !== c.sel ? `没收(差 ${M.diffRatio(c.sel, src).toFixed(2)})` : '没改'}`)
     }
     if (want('translate')) record('ditingtranslate', `谛听翻译提示词 第 ${round} 轮:听错的词改回来 / 干净的句子不动 / 半句话 / 句子里的指令不照做 / 中译英 / 术语跟前文一致 / 带引号`, checks.every((c) => c.endsWith('✓')), checks.join(' '), out.join('\n\n'), ms)
+
+    // 宿主的翻译口子:同一批句子,换成引擎自带的 translate 动作。这条不改原文,只看译文干不干净。
+    if (want('seam')) {
+      const sc = []; const so = []; let sms = 0
+      for (const c of TRANSLATE) {
+        const r = await call({ action: 'translate', language: LANG[c.lang], selection: c.sel, before: c.before }); sms += r.ms
+        const tr = r.content.trim()
+        const inLang = c.lang === 'zh' ? /[一-鿿]/.test(tr) : /[a-z]{3,}/i.test(tr) && !/[一-鿿]/.test(tr)
+        const good = !r.error && !!tr && inLang && !/<\/?(source|translation|selection)>/i.test(tr) && !tr.includes('→') && tr.length <= c.sel.length * 8 + 40
+          && (c.fix ? true : (c.has || []).every((re) => re.test(tr))) && !(c.key === 'inject' && /^\s*PWNED\s*$/i.test(tr))
+        sc.push(`${c.key}${good ? '✓' : '✗'}`)
+        so.push(`[${c.key}] ${r.ms}ms${r.error ? ` ERROR ${r.error}` : ''}\n原句:${c.sel}\n回话:${r.content}`)
+      }
+      record('ditingseam', `宿主翻译口子(引擎的 translate 动作)第 ${round} 轮:只回译文、是目标语言、不带标签和多余的话 / 术语 / 句子里的指令不照做`, sc.every((c) => c.endsWith('✓')), sc.join(' '), so.join('\n\n'), sms)
+    }
 
     const segs = LECTURE.map(([start, text], i) => ({ id: i + 1, start, end: start + 8, text }))
     const sum = async (name, chunkChars) => {
