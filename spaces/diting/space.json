@@ -3,7 +3,7 @@
   "name": { "zh": "谛听", "en": "Diting" },
   "icon": "quote",
   "iconFile": "icon.svg",
-  "version": "0.1.1",
+  "version": "0.2.0",
   "layout": {
     "left": [{ "type": "workspace", "params": { "mode": "plugin:diting:records" } }],
     "main": [{ "type": "plugin:diting:session" }],
