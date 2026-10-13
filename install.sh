@@ -23,7 +23,7 @@ fi
 mkdir -p "$HOME_DIR/plugins"
 rm -rf "$DEST"
 mkdir -p "$DEST"
-cp -R "$HERE/manifest.json" "$HERE/main.js" "$HERE/icon.svg" "$HERE/spaces" "$HERE/agents" "$HERE/LICENSE" "$DEST/"
+cp -R "$HERE/manifest.json" "$HERE/main.js" "$HERE/icon.svg" "$HERE/icon.png" "$HERE/spaces" "$HERE/agents" "$HERE/LICENSE" "$DEST/"
 
 echo "已安装 → $DEST"
 echo "重开 Forsion 后,在功能条的「…」里找「谛听」,或者命令面板里搜「谛听：打开」。"

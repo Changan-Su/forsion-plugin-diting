@@ -4,6 +4,20 @@ Forsion 的插件:把上课、开会、访谈时听到的话变成带时间的�
 
 A Forsion plugin that turns what you hear in a class, meeting or interview into timestamped text, translates it as it goes, answers questions about it at any time, and writes a summary when it ends. (English notes are at the end.)
 
+## 安装
+
+Forsion 桌面端 2.13.2 及以上:打开「商店」,搜「谛听」,点安装。装好后在功能条的「…」里找「谛听」,或者在命令面板里搜「谛听：打开」。
+
+从源码装:
+
+```bash
+git clone https://github.com/Changan-Su/forsion-plugin-diting.git
+cd forsion-plugin-diting
+sh install.sh prod      # 装进 ~/.forsion;不带参数装进开发用的 ~/.forsion-dev
+```
+
+转写用的是 Forsion 自己的语音识别,先在 设置 › 语音 里选好(本机模型不联网、不花额度)。只在桌面端测过(macOS);Windows 还没有实测。
+
 ## 能做什么
 
 - **实时转写**:按说话的停顿切成一句一句,一句说完一两秒内出文字。用的是 Forsion 自己的语音识别(设置 › 语音),选本机模型就不联网、不花额度。
@@ -68,6 +82,8 @@ sh install.sh           # 装进 ~/.forsion-dev(sh install.sh prod 装进 ~/.for
 Limits today: no speaker labels, microphone only (no system audio), text appears per sentence rather than per word. All three need new host seams in Forsion.
 
 Everything is saved in your vault, one folder per recording.
+
+Install: Forsion desktop 2.13.2 or later → Store → search "Diting". Tested on macOS only so far.
 
 ## License
 

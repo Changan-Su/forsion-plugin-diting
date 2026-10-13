@@ -63,7 +63,7 @@ async function main() {
 
   // 插件:只拷发布时会带的那几样
   const dest = path.join(home, 'plugins', 'diting'); fs.mkdirSync(dest, { recursive: true })
-  for (const f of ['manifest.json', 'main.js', 'icon.svg', 'spaces', 'agents']) fs.cpSync(path.join(HERE, f), path.join(dest, f), { recursive: true })
+  for (const f of ['manifest.json', 'main.js', 'icon.svg', 'icon.png', 'spaces', 'agents']) fs.cpSync(path.join(HERE, f), path.join(dest, f), { recursive: true })
 
   // 离线语音模型:链接本机已有的
   const model = [path.join(os.homedir(), '.forsion-dev/models/sensevoice'), path.join(os.homedir(), '.forsion/models/sensevoice')].find((p) => fs.existsSync(path.join(p, 'tokens.txt')))

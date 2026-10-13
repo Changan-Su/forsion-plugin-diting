@@ -1,1 +1,11 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 10v3"/><path d="M6 6v11"/><path d="M10 3v18"/><path d="M14 8v7"/><path d="M18 5v13"/><path d="M22 10v3"/></svg>
+<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256" viewBox="0 0 256 256" role="img" aria-labelledby="title">
+  <title id="title">谛听 Diting — Speech to text</title>
+  <!-- Original Forsion plugin identity artwork, 2026-10-13. -->
+  <defs><linearGradient id="tile" x1="28" y1="12" x2="222" y2="252" gradientUnits="userSpaceOnUse"><stop stop-color="#3d4f4c"/><stop offset="1" stop-color="#232f2d"/></linearGradient></defs>
+  <rect x="4" y="4" width="248" height="248" rx="58" fill="url(#tile)"/>
+  <g fill="none" stroke-linecap="round">
+    <path d="M58 112v32M82 88v80M106 64v128M130 98v60" stroke="#f4eee2" stroke-width="13"/>
+    <path d="M162 100h40M162 128h30M162 156h36" stroke="#f4eee2" stroke-width="10" opacity=".55"/>
+    <path d="M162 128h30" stroke="#e7b05a" stroke-width="10"/>
+  </g>
+</svg>
