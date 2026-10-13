@@ -57,6 +57,8 @@ declare const ctx: {
     agents?(): Array<{ slug: string; name: string }>
     mountChat?(el: HTMLElement, o?: { agent?: string; folder?: string; title?: string }): HostChatMount
     complete?(req: { prompt: string; selection?: string; before?: string; after?: string; signal?: AbortSignal }): Promise<{ text: string }>
+    /** 只做翻译;模型取用户在「设置 → 模型 → 翻译」里选的那个(2.13.3 之后的桌面版本才有)。 */
+    translate?(req: { text: string; language: string; before?: string; signal?: AbortSignal }): Promise<{ text: string }>
   }
 }
 

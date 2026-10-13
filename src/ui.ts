@@ -744,14 +744,16 @@ export function mountSettings(el: HTMLElement): () => void {
     if (next === sig) return
     sig = next
     const row = (label: string, control: HTMLElement, hint?: string): HTMLElement => h('div', { class: 'dt-row' }, h('label', null, label, hint ? h('small', null, hint) : null), control)
-    const sw = (key: 'keep' | 'autoSummary'): HTMLElement => h('input', { type: 'checkbox', class: 'dt-sw', 'data-pref': key, checked: p[key] })
+    const sw = (key: 'keep' | 'autoSummary' | 'fix'): HTMLElement => h('input', { type: 'checkbox', class: 'dt-sw', 'data-pref': key, checked: p[key] })
     const sel = (key: 'target' | 'partial' | 'style', options: Array<[string, string]>): HTMLElement => { const s = select('', options, String(p[key])); s.dataset.pref = key; return s }
     const terms = Object.entries(p.terms)
     root.replaceChildren(
       h('div', { class: 'dt-set-h' }, t('setLayout')),
       h('div', { class: 'dt-cards', role: 'radiogroup' }, ...LAYOUTS.map(([id, key, hint]) => h('button', { type: 'button', role: 'radio', 'aria-checked': p.layout === id, class: `dt-card${p.layout === id ? ' on' : ''}`, 'data-layout': id },
         h('span', { class: `pic ${id}`, html: '<i></i><i></i><i></i>' }), h('b', null, t(key)), h('small', null, t(hint))))),
-      row(t('setTarget'), sel('target', targetOptions())),
+      row(t('setTarget'), sel('target', targetOptions()), ctx.tangu?.translate ? t('setTargetHint') : undefined),
+      // 旧宿主没有专门的翻译口子,翻译时一直是顺带改的,没有可选的余地,这一行不出。
+      ...(ctx.tangu?.translate ? [row(t('setFix'), sw('fix'), t('setFixHint'))] : []),
       row(t('setKeep'), sw('keep'), t('keepHint')),
       row(t('setPartial'), sel('partial', [['auto', t('partialAuto')], ['on', t('on')], ['off', t('off')]]), t('setPartialHint')),
       row(t('setAutoSummary'), sw('autoSummary'), t('setAutoSummaryHint')),

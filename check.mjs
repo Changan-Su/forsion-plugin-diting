@@ -141,18 +141,19 @@ try {
 
   // ── 落盘:用内存里的假库跑引擎里不碰麦克风的那几条路(代码评审里查出来会丢数据的地方)──
   {
-    const files = new Map(); let gate = Promise.resolve()
+    const files = new Map(); let gate = Promise.resolve(); const calls = []
     globalThis.window = globalThis
+    const ls = new Map(); Object.defineProperty(globalThis, 'localStorage', { configurable: true, value: { getItem: (k) => ls.get(k) ?? null, setItem: (k, v) => { ls.set(k, String(v)) } } }) // 偏好存在 localStorage
     globalThis.ctx = {
       app: {
         readFile: async (p) => files.get(p) ?? null, writeFile: async (p, s) => { files.set(p, s) }, workFolder: () => '谛听', vaultRoot: () => '/v',
         trash: async (f) => { for (const k of [...files.keys()]) if (k.startsWith(`${f}/`)) files.delete(k) },
       },
-      tangu: { complete: async () => { await gate; return { text: '<source>今天讲拉比频率。</source><translation>T</translation>' } } },
+      tangu: { complete: async (q) => { calls.push(['complete', q.selection]); await gate; return { text: '<source>今天讲拉比频率。</source><translation>T</translation>' } } },
       notify() {},
     }
-    await build({ stdin: { contents: `export * as E from './src/engine'; export * as St from './src/store'; export { S, prefs } from './src/state'`, resolveDir: process.cwd(), loader: 'ts' }, bundle: true, format: 'esm', outfile: join(dir, 'owner.mjs'), logLevel: 'silent' })
-    const { E, St, S, prefs } = await load('owner.mjs')
+    await build({ stdin: { contents: `export * as E from './src/engine'; export * as St from './src/store'; export { S, prefs, setPref } from './src/state'`, resolveDir: process.cwd(), loader: 'ts' }, bundle: true, format: 'esm', outfile: join(dir, 'owner.mjs'), logLevel: 'silent' })
+    const { E, St, S, prefs, setPref } = await load('owner.mjs')
     assert.equal(prefs().target, '')
     n++; console.log('✓ 翻译默认关(没选过语言的人不会一装上就每句调用模型)')
     const seed = (id, extra = {}) => {
@@ -161,14 +162,14 @@ try {
       files.set(`${folder}/.record.json`, JSON.stringify(rec))
       return M.rowOf(rec)
     }
-    const rows = [seed('a'), seed('b'), seed('c', { target: 'en', segments: [{ id: 1, start: 0, end: 2, text: '今天讲拉比频率。', tr: 'old', trState: 'done' }] }), seed('d', { status: 'live' })]
+    const rows = [seed('a'), seed('b'), seed('c', { target: 'en', segments: [{ id: 1, start: 0, end: 2, text: '今天讲拉比频率。', tr: 'old', trState: 'done' }] }), seed('d', { status: 'live' }), seed('e', { segments: [{ id: 1, start: 0, end: 2, text: '今天讲拉比贫率。' }] })]
     files.set('谛听/.diting-index.json', JSON.stringify(rows))
     const settle = async () => { for (let i = 0; i < 5; i++) { await new Promise((r) => setTimeout(r, 5)); await St.queued(async () => undefined) } }
     const disk = (id) => JSON.parse(files.get(`谛听/${id}/.record.json`) || 'null')
     const pass = (name) => { n++; console.log(`✓ ${name}`) }
 
     await Promise.all([St.init(), St.init()]); await settle()
-    assert.equal(S.index.length, 4); assert.equal(disk('d').status, 'done')
+    assert.equal(S.index.length, 5); assert.equal(disk('d').status, 'done')
     pass('开场:读列表,上次没收尾的记录改成已结束')
 
     await Promise.all([E.apply({ c: 'note', rec: 'a', text: '第一条', t: 1 }), E.apply({ c: 'note', rec: 'a', text: '第二条', t: 2 })]); await settle()
@@ -184,6 +185,20 @@ try {
     await E.apply({ c: 'delete', rec: 'b' }); open(); await settle()
     assert.equal(disk('b'), null); assert.ok(!S.index.some((r) => r.id === 'b')); assert.ok(!JSON.parse(files.get('谛听/.diting-index.json')).some((r) => r.id === 'b'))
     pass('删掉的记录:还在路上的翻译回来以后不会把它写回去')
+
+    // 宿主有专门的翻译口子:默认走它(只翻译、不改原文);打开「顺带纠正」才回到聊天模型那条
+    const seen = []
+    globalThis.ctx.tangu.translate = async (q) => { seen.push(q); return { text: ' 今日はラビ周波数。 ' } }
+    calls.length = 0
+    await E.apply({ c: 'target', rec: 'e', target: 'ja' }); await settle()
+    assert.deepEqual([seen.length, seen[0].text, seen[0].language, calls.length], [1, '今天讲拉比贫率。', 'Japanese', 0])
+    assert.deepEqual([disk('e').segments[0].tr, disk('e').segments[0].text, disk('e').segments[0].raw], ['今日はラビ周波数。', '今天讲拉比贫率。', undefined])
+    pass('宿主有翻译口子:逐句走它(用「翻译」模型槽),只取译文、不动原文')
+    setPref('fix', true)
+    await E.apply({ c: 'target', rec: 'e', target: 'en' }); await settle()
+    assert.deepEqual([seen.length, calls.length, disk('e').segments[0].tr, disk('e').segments[0].text, disk('e').segments[0].raw], [1, 1, 'T', '今天讲拉比频率。', '今天讲拉比贫率。'])
+    setPref('fix', false)
+    pass('打开「翻译时顺带纠正听错的词」:回到聊天模型那条,原文被改正、留着改之前的')
   }
 
   test('发布物:main.js 就是当前源码打出来的,版本号对得上', async () => 0)

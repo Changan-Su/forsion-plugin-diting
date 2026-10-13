@@ -1,9 +1,12 @@
-// 翻译(顺带按上下文改听错的词)和纪要。都走宿主的一次性补全 ctx.tangu.complete:不带工具、不进会话。
+// 翻译和纪要,都是宿主的一次性调用(不带工具、不进会话)。
+// 翻译:宿主有 ctx.tangu.translate 就走它 —— 只翻译,模型是用户在「设置 → 模型 → 翻译」里选的那个(可以是便宜的小模型
+// 或专门的翻译模型)。「顺带按上下文改听错的词」要聊天模型按下面那套格式回话,是设置里的一个开关(默认关);
+// 旧宿主没有 translate,照旧用 ctx.tangu.complete 一并做。纪要一直走 complete。
 // 提示词是给模型读的,一律英文。
 
 import { getLocale, t, targetEnglish } from './i18n'
 import { acceptFix, alreadyIn, chunkSegments, clock, looseJson, mergeSummaries, plainLines, readSummary, summaryMd, tagOf, type Rec, type Segment, type SummaryStyle } from './model'
-import { emit, S } from './state'
+import { emit, prefs, S } from './state'
 
 export const canAi = (): boolean => !!ctx.tangu?.complete
 
@@ -73,13 +76,18 @@ async function one(rec: Rec, seg: Segment): Promise<void> {
   // 前面几句连同已经给出的译文一起带上:同一个术语前后要译成一样的。
   const before = rec.segments.slice(Math.max(0, i - 6), Math.max(0, i)).filter((s) => s.text).map((s) => (s.tr ? `${s.text}\n→ ${s.tr}` : s.text)).join('\n').slice(-3000)
   try {
-    const r = await ctx.tangu!.complete!({ prompt: TRANSLATE(targetEnglish(target)), selection: seg.text, before })
+    const seam = prefs().fix ? undefined : ctx.tangu?.translate
+    const r = seam
+      ? await seam({ text: seg.text, language: targetEnglish(target), before })
+      : await ctx.tangu!.complete!({ prompt: TRANSLATE(targetEnglish(target)), selection: seg.text, before })
     // 等的时候目标语言换了:这份是旧语言的,不要。
     if (rec.target !== target) return
-    const tr = tagOf(r.text, 'translation')
+    const tr = seam ? r.text.trim() : tagOf(r.text, 'translation')
     if (!tr) throw new Error('no translation in reply')
-    const fixed = tagOf(r.text, 'source')
-    if (!seg.raw && acceptFix(seg.text, fixed)) { seg.raw = seg.text; seg.text = fixed }
+    if (!seam) {
+      const fixed = tagOf(r.text, 'source')
+      if (!seg.raw && acceptFix(seg.text, fixed)) { seg.raw = seg.text; seg.text = fixed }
+    }
     seg.tr = tr; seg.trState = 'done'
   } catch (e) {
     console.warn('[diting] translate', e)
