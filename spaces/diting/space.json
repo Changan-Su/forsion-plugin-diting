@@ -1,0 +1,18 @@
+{
+  "id": "diting",
+  "name": { "zh": "谛听", "en": "Diting" },
+  "icon": "quote",
+  "iconFile": "icon.svg",
+  "version": "0.1.0",
+  "layout": {
+    "left": [{ "type": "workspace", "params": { "mode": "plugin:diting:records" } }],
+    "main": [{ "type": "plugin:diting:session" }],
+    "right": [{ "type": "plugin:diting:chapters" }, { "type": "plugin:diting:chat" }]
+  },
+  "mini": {
+    "name": { "zh": "谛听小窗", "en": "Diting mini" },
+    "view": { "type": "plugin:diting:mini" },
+    "mainView": { "type": "plugin:diting:session" }
+  },
+  "requires": { "views": ["plugin:diting:session", "plugin:diting:chat", "plugin:diting:chapters"] }
+}

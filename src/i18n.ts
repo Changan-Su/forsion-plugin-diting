@@ -1,0 +1,112 @@
+// 界面文案:zh / en 两份键集必须一样(check.mjs 有断言)。语言跟宿主走,切语言时视图不重挂也要变。
+
+const ZH = {
+  name: '谛听',
+  tabTranscript: '转写', tabNotes: '笔记', tabSummary: '纪要', tabSplit: '转写和笔记',
+  recording: '正在记录', paused: '已暂停', importing: '正在转写文件', savedAudio: '录音已保留', 
+  srcMic: '麦克风', pause: '暂停', resume: '继续', stop: '结束', mark: '标重点', unmark: '取消重点',
+  listening: '正在听', translating: '翻译中', trFailed: '没翻译成', retry: '重试',
+  low: '没听清', lowHint: '离麦克风远',
+  playFrom: '从这里听', quoteAsk: '引用提问', play: '播放', 
+  fixed: '听成了 {from}，按上下文改成 {to}', revert: '改回去', addTerm: '加进术语表', termAdded: '已加进术语表，后面听到会直接改',
+  stacked: '译文在下', paired: '左右对照', originalOnly: '只看原文', more: '更多',
+  layout: '布局', layoutTranscript: '转写为主', layoutNotes: '笔记为主', layoutSplit: '转写和笔记并排',
+  layoutTranscriptHint: '主区是跟着说话往下长的文稿，笔记在另一个标签里', layoutNotesHint: '主区是你自己的笔记，转写在底部面板里滚动', layoutSplitHint: '主区一分为二，左边转写、右边笔记',
+  openTranscript: '在笔记里打开转写', reveal: '在文件夹里显示', rename: '改标题',
+  target: '翻译成', targetOff: '不翻译', langZh: '中文', langEn: 'English', langJa: '日本語', langKo: '한국어', langFr: 'Français', langDe: 'Deutsch', langEs: 'Español',
+  startTitle: '开始一次记录', startHint: '录下来，转成文字，需要的话同时翻译。过程中可以在右边随时提问。',
+  fieldTitle: '标题', titlePlaceholder: '可以不填', fieldTarget: '翻译成', fieldKeep: '保留录音', keepHint: '保留以后可以点时间回听。录音存在你的笔记库里。',
+  start: '开始记录', importFile: '导入音频或视频文件', untitled: '未命名记录',
+  noVault: '需要先打开一个笔记库：转写、笔记和录音都存在库里。', noAsr: '转写没有成功：{e}', noMic: '麦克风打不开：{e}', micDenied: '没有麦克风权限。到 系统设置 › 隐私与安全性 › 麦克风 里允许 Forsion。',
+  busy: '已经有一次记录在进行', importTooLong: '这个文件太长了（超过 {h} 小时），先切成几段再导入。', importFailed: '这个文件读不出声音：{e}',
+  noSpeechYet: '还没有听到说话。', emptyTranscript: '这次记录里没有识别出内容。',
+  notePlaceholder: '记一条，回车保存', noteHint: '每条自动带上当时的时间。结束以后，纪要会把你的笔记和转写合在一起写。', noNotes: '还没有笔记。',
+  summaryEmpty: '还没有纪要。', summaryLive: '结束以后在这里写纪要。', writeSummary: '写纪要', rewrite: '重写', writing: '正在写纪要…', summaryFailed: '纪要没写成：{e}',
+  styleClass: '课堂', styleMeeting: '会议', styleInterview: '访谈',
+  hPoints: '要点', hTodosClass: '老师留的事', hTodosMeeting: '待办', hTodosInterview: '后续', hTerms: '术语',
+  summaryFrom: '根据转写和 {n} 条笔记写成', summaryFromNoNotes: '根据转写写成',
+  chat: '对话', chapters: '章节', chaptersEmpty: '写完纪要以后，这里会按内容分出章节。', marks: '标了重点的', chatEmpty: '开始记录以后，可以在这里对已经记下的内容提问。', chatUnavailable: '这个版本的 Forsion 还不能把对话放进这里。',
+  askRecent: '最近两分钟讲了什么？', askSoFar: '到现在为止的要点', askRecentPrompt: '我走神了，最近两分钟讲了什么？', askSoFarPrompt: '到现在为止讲了哪些要点？',
+  captions: '实时字幕', captionsIdle: '没有正在进行的记录。',
+  miniIdle: '没有正在进行的记录', miniStart: '开始记录', miniOpen: '回到谛听',
+  statusTitle: '谛听：点一下回到正在进行的记录',
+  groupLive: '进行中', groupWeek: '本周', groupEarlier: '更早', newRecord: '新记录', liveHint: '录音中', pausedHint: '已暂停',
+  cmdOpen: '谛听：打开', cmdStart: '谛听：开始记录', cmdMini: '谛听：打开小窗',
+  durMin: '{m} 分', durHour: '{h} 小时 {m} 分', durSec: '{s} 秒',
+  setLayout: '布局', setPartial: '边说边显示', setPartialHint: '一句话还没说完就先显示出来（会多识别几次；用本机模型时不花额度）。', setAutoSummary: '结束后自动写纪要', setAutoSummaryHint: '关掉以后，在「纪要」标签里手动点「写纪要」。', setKeep: '默认保留录音', setTarget: '默认翻译成',
+  on: '开', off: '关', audioNotSaved: '录音文件没能完整存下来，文字不受影响。', interrupted: '上次没有正常结束，已经记下的内容都在。',
+  finishing: '正在收尾', cancel: '取消', del: '删除', latest: '回到最新', display: '显示', 
+  deleteRecord: '删除这次记录', deleted: '已移到回收站', deleteConfirm: '再点一次确认删除',
+  partialAuto: '自动（只在用本机模型时）', setStyle: '纪要的写法', setGlossary: '术语表', setGlossaryHint: '听错的写法 → 正确的写法。在转写里点一句被改过的话，可以把那次改动加进来。', glossaryEmpty: '还没有术语。',
+  needAi: '这个版本的 Forsion 还不能在这里调用模型，翻译和纪要用不了。', sourceFile: '导入的文件', asrFailed: '这一段没有转写成', 
+  askPlaceholder: '对这次记录提问…', miniNote: '记一条', back: '返回', noRecord: '这条记录打不开了（文件夹被移走或删掉了）。',
+}
+
+const EN: typeof ZH = {
+  name: 'Diting',
+  tabTranscript: 'Transcript', tabNotes: 'Notes', tabSummary: 'Summary', tabSplit: 'Transcript and notes',
+  recording: 'Recording', paused: 'Paused', importing: 'Transcribing file', savedAudio: 'Audio kept', 
+  srcMic: 'Microphone', pause: 'Pause', resume: 'Resume', stop: 'End', mark: 'Mark', unmark: 'Remove mark',
+  listening: 'Listening', translating: 'Translating', trFailed: 'Translation failed', retry: 'Retry',
+  low: 'Unclear', lowHint: 'Far from the microphone',
+  playFrom: 'Play from here', quoteAsk: 'Quote and ask', play: 'Play', 
+  fixed: 'Heard as {from}, changed to {to} from context', revert: 'Change back', addTerm: 'Add to glossary', termAdded: 'Added to the glossary. It will be corrected from now on.',
+  stacked: 'Translation below', paired: 'Side by side', originalOnly: 'Original only', more: 'More',
+  layout: 'Layout', layoutTranscript: 'Transcript first', layoutNotes: 'Notes first', layoutSplit: 'Transcript and notes side by side',
+  layoutTranscriptHint: 'The main area is the transcript as it grows. Notes live in another tab.', layoutNotesHint: 'The main area is your own notes. The transcript scrolls in the bottom panel.', layoutSplitHint: 'The main area is split: transcript on the left, notes on the right.',
+  openTranscript: 'Open transcript as a note', reveal: 'Show in folder', rename: 'Rename',
+  target: 'Translate to', targetOff: 'No translation', langZh: '中文', langEn: 'English', langJa: '日本語', langKo: '한국어', langFr: 'Français', langDe: 'Deutsch', langEs: 'Español',
+  startTitle: 'Start a recording', startHint: 'Record, turn speech into text and translate it as you go. Ask questions on the right at any time.',
+  fieldTitle: 'Title', titlePlaceholder: 'Optional', fieldTarget: 'Translate to', fieldKeep: 'Keep the audio', keepHint: 'Keeping it lets you click a time to listen again. The audio is saved in your vault.',
+  start: 'Start recording', importFile: 'Import an audio or video file', untitled: 'Untitled recording',
+  noVault: 'Open a vault first: the transcript, notes and audio are saved there.', noAsr: 'Transcription failed: {e}', noMic: 'Could not open the microphone: {e}', micDenied: 'Microphone access is off. Allow Forsion under System Settings › Privacy & Security › Microphone.',
+  busy: 'A recording is already in progress', importTooLong: 'This file is too long (over {h} hours). Split it before importing.', importFailed: 'Could not read audio from this file: {e}',
+  noSpeechYet: 'No speech heard yet.', emptyTranscript: 'Nothing was recognized in this recording.',
+  notePlaceholder: 'Write a note, press Enter to save', noteHint: 'Each note is stamped with the current time. After the recording ends, the summary combines your notes with the transcript.', noNotes: 'No notes yet.',
+  summaryEmpty: 'No summary yet.', summaryLive: 'The summary is written here after the recording ends.', writeSummary: 'Write summary', rewrite: 'Rewrite', writing: 'Writing the summary…', summaryFailed: 'Could not write the summary: {e}',
+  styleClass: 'Class', styleMeeting: 'Meeting', styleInterview: 'Interview',
+  hPoints: 'Key points', hTodosClass: 'Assigned by the teacher', hTodosMeeting: 'Action items', hTodosInterview: 'Follow-ups', hTerms: 'Terms',
+  summaryFrom: 'Written from the transcript and {n} notes', summaryFromNoNotes: 'Written from the transcript',
+  chat: 'Chat', chapters: 'Chapters', chaptersEmpty: 'Chapters appear here once the summary is written.', marks: 'Marked', chatEmpty: 'Once a recording starts, ask about what has been said here.', chatUnavailable: 'This version of Forsion cannot place a chat here yet.',
+  askRecent: 'What was said in the last two minutes?', askSoFar: 'Key points so far', askRecentPrompt: 'I lost track. What was said in the last two minutes?', askSoFarPrompt: 'What are the key points so far?',
+  captions: 'Live captions', captionsIdle: 'No recording in progress.',
+  miniIdle: 'No recording in progress', miniStart: 'Start recording', miniOpen: 'Back to Diting',
+  statusTitle: 'Diting: click to return to the recording in progress',
+  groupLive: 'In progress', groupWeek: 'This week', groupEarlier: 'Earlier', newRecord: 'New recording', liveHint: 'Recording', pausedHint: 'Paused',
+  cmdOpen: 'Diting: Open', cmdStart: 'Diting: Start recording', cmdMini: 'Diting: Open mini window',
+  durMin: '{m} min', durHour: '{h} h {m} min', durSec: '{s} s',
+  setLayout: 'Layout', setPartial: 'Show words as they are spoken', setPartialHint: 'Shows a sentence before it is finished (transcribes more often; free with the on-device model).', setAutoSummary: 'Write the summary when a recording ends', setAutoSummaryHint: 'When off, use Write summary in the Summary tab.', setKeep: 'Keep the audio by default', setTarget: 'Translate to by default',
+  on: 'On', off: 'Off', audioNotSaved: 'The audio could not be saved completely. The transcript is not affected.', interrupted: 'The last recording did not end normally. Everything captured so far is here.',
+  finishing: 'Finishing', cancel: 'Cancel', del: 'Delete', latest: 'Jump to latest', display: 'Display', 
+  deleteRecord: 'Delete this recording', deleted: 'Moved to the trash', deleteConfirm: 'Click again to delete',
+  partialAuto: 'Automatic (only with the on-device model)', setStyle: 'Summary style', setGlossary: 'Glossary', setGlossaryHint: 'Misheard spelling → correct spelling. Click a corrected sentence in a transcript to add that change here.', glossaryEmpty: 'No terms yet.',
+  needAi: 'This version of Forsion cannot call a model from here, so translation and summaries are unavailable.', sourceFile: 'Imported file', asrFailed: 'This part was not transcribed', 
+  askPlaceholder: 'Ask about this recording…', miniNote: 'Write a note', back: 'Back', noRecord: 'This recording cannot be opened (its folder was moved or deleted).',
+}
+
+export const MSG = { zh: ZH, en: EN }
+export type Key = keyof typeof ZH
+
+let locale: 'zh' | 'en' = 'zh'
+export const setLocale = (l: 'zh' | 'en'): void => { locale = l === 'en' ? 'en' : 'zh' }
+export const getLocale = (): 'zh' | 'en' => locale
+
+/** 占位符单趟替换:先替进去的值里就算有 {x} 也不会被再吃一遍。 */
+export function t(key: Key, vars?: Record<string, string | number>): string {
+  const s = MSG[locale][key] ?? MSG.zh[key] ?? key
+  return vars ? s.replace(/\{(\w+)\}/g, (m, k: string) => (k in vars ? String(vars[k]) : m)) : s
+}
+
+export function duration(sec: number): string {
+  const s = Math.max(0, Math.round(sec))
+  if (s < 60) return t('durSec', { s })
+  const m = Math.round(s / 60)
+  return m < 60 ? t('durMin', { m }) : t('durHour', { h: Math.floor(m / 60), m: m % 60 })
+}
+
+export const TARGETS: Array<{ id: string; key: Key; english: string }> = [
+  { id: 'zh', key: 'langZh', english: 'Simplified Chinese' }, { id: 'en', key: 'langEn', english: 'English' }, { id: 'ja', key: 'langJa', english: 'Japanese' },
+  { id: 'ko', key: 'langKo', english: 'Korean' }, { id: 'fr', key: 'langFr', english: 'French' }, { id: 'de', key: 'langDe', english: 'German' }, { id: 'es', key: 'langEs', english: 'Spanish' },
+]
+export const targetLabel = (id: string): string => { const x = TARGETS.find((l) => l.id === id); return x ? t(x.key) : t('targetOff') }
+export const targetEnglish = (id: string): string => TARGETS.find((l) => l.id === id)?.english || ''

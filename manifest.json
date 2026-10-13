@@ -1,0 +1,46 @@
+{
+  "id": "diting",
+  "name": "谛听",
+  "nameEn": "Diting",
+  "version": "0.1.0",
+  "apiVersion": 1,
+  "minAppVersion": "2.13.0",
+  "description": "把听到的变成文字。上课、开会、访谈的时候录下来，边说边出文字，需要的话同时翻译；过程中可以在右边对已经记下的内容随时提问，结束以后自动写纪要、分章节。转写走 Forsion 自己的语音识别（设置 › 语音），转写、笔记、纪要和录音都存在你的笔记库里。切到别的 Space 或把窗口收起来，记录不会停；也可以开成小窗放在一边。",
+  "descriptionEn": "Turn what you hear into text. Record a class, meeting or interview, get the words as they are spoken and translate them as you go; ask about what has been said at any time in the side panel, and get a summary with chapters when it ends. Transcription uses Forsion's own speech recognition (Settings › Voice); the transcript, notes, summary and audio are saved in your vault. Recording keeps going when you switch to another Space or hide the window, and a mini window can sit beside your other work.",
+  "main": "main.js",
+  "onboarding": {
+    "intro": "谛听把上课、开会、访谈的声音变成带时间的文字，可以同时翻译，可以随时提问，结束以后写纪要。",
+    "steps": [
+      {
+        "title": "语音识别和麦克风",
+        "description": "转写用的是 Forsion 自己的语音识别：在 设置 › 语音 里选好（本机模型不联网、不花额度；也可以用云端）。第一次点「开始记录」时系统会问麦克风权限（macOS：系统设置 › 隐私与安全性 › 麦克风）。"
+      },
+      {
+        "title": "记录一次",
+        "description": "在谛听里点「开始记录」。文字会跟着说话一句一句出来；选了「翻译成」的话，每句下面跟着译文。点一句可以标重点、引用提问。切到别的 Space、关掉标签页、把窗口收进托盘都不会停，状态栏会显示计时；命令面板里的「谛听：打开小窗」可以把字幕放在一边。"
+      },
+      {
+        "title": "结束以后",
+        "description": "点「结束」后会自动写纪要和章节（可以在设置里关掉）。保留了录音的话，点任何一个时间就从那里回放。已有的音频或视频文件可以用「导入」转成同样的记录。布局有三种（转写为主、笔记为主、并排），在插件设置或页面右上角的「…」里换。"
+      }
+    ],
+    "en": {
+      "intro": "Diting turns the sound of a class, meeting or interview into timestamped text. It can translate as it goes, answer questions at any time, and write a summary at the end.",
+      "steps": [
+        {
+          "title": "Speech recognition and microphone",
+          "description": "Transcription uses Forsion's own speech recognition: choose it under Settings › Voice (the on-device model works offline and costs nothing; cloud models are also available). The first time you start a recording, the system asks for microphone access (macOS: System Settings › Privacy & Security › Microphone)."
+        },
+        {
+          "title": "Record something",
+          "description": "Click Start recording in Diting. Text appears sentence by sentence as people speak; with Translate to set, each sentence is followed by its translation. Click a sentence to mark it or to quote it in a question. Recording continues when you switch to another Space, close the tab or hide the window, and the status bar shows the timer; \"Diting: Open mini window\" in the command palette keeps the captions beside your other work."
+        },
+        {
+          "title": "Afterwards",
+          "description": "When you end a recording, a summary and chapters are written automatically (you can turn this off in settings). If the audio was kept, click any time to listen from there. Use Import to turn an existing audio or video file into the same kind of record. There are three layouts (transcript first, notes first, side by side); switch in the plugin settings or from the \"…\" menu at the top right of the page."
+        }
+      ]
+    },
+    "settings": true
+  }
+}

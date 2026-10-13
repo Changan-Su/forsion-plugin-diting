@@ -1,0 +1,214 @@
+/* 颜色、圆角、字体全部用宿主的主题变量(DESIGN.md);不写滚动条样式、不画虚线框。尺寸跟着容器走,不按固定宽度写死。 */
+.dt, .dt-side, .dt-mini, .dt-set { color: var(--text); font-family: var(--font-ui); font-size: 13px; box-sizing: border-box; }
+.dt *, .dt-side *, .dt-mini *, .dt-set * { box-sizing: border-box; }
+/* 宿主给的视图容器:要有高度、能定位(页面是铺满它的) */
+.dt-host { position: relative; height: 100%; overflow: hidden; }
+.dt { position: absolute; inset: 0; display: flex; flex-direction: column; container-type: inline-size; }
+.dt button, .dt-side button, .dt-mini button, .dt-set button { border: 0; background: none; cursor: pointer; font-family: var(--font-ui); color: inherit; padding: 0; }
+.dt button:disabled, .dt-mini button:disabled { opacity: .5; cursor: default; }
+.dt svg, .dt-side svg, .dt-mini svg, .dt-set svg { width: 14px; height: 14px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; flex: none; }
+.dt :focus-visible, .dt-side :focus-visible, .dt-mini :focus-visible, .dt-set :focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+
+/* 顶栏 */
+.dt-bar { height: 40px; flex: none; display: flex; align-items: center; gap: 4px; padding: 0 12px; }
+.dt-bar:empty { display: none; }
+.dt-tabs { display: inline-flex; padding: 2px; border-radius: 8px; background: var(--overlay-light); }
+.dt .dt-tabs button { height: 24px; padding: 0 13px; border-radius: 6px; font-size: 12px; color: var(--text-muted); white-space: nowrap; }
+.dt .dt-tabs button.on { background: var(--bg-card); color: var(--text); font-weight: 500; box-shadow: 0 0 0 1px var(--border), 0 1px 2px rgba(0, 0, 0, .04); }
+.dt-sp { flex: 1; }
+.dt-sel { height: 28px; padding: 0 8px; border-radius: 8px; border: 1px solid var(--border); background: var(--bg-card); color: var(--text); font: 12.5px var(--font-ui); max-width: 100%; }
+.dt-sel.pill { height: 26px; border-radius: 999px; color: var(--text-muted); font-size: 12px; margin-right: 4px; }
+.dt .dt-ibtn { width: 26px; height: 26px; display: inline-flex; align-items: center; justify-content: center; border-radius: 6px; color: var(--text-muted); }
+.dt .dt-ibtn:hover { background: var(--overlay-light); color: var(--text); }
+.dt-banner { flex: none; margin: 0 12px 6px; padding: 7px 12px; border-radius: 8px; background: color-mix(in srgb, var(--warning) 12%, transparent); font-size: 12.5px; line-height: 1.5; }
+.dt-main { flex: 1; min-height: 0; display: flex; flex-direction: column; position: relative; }
+.dt-scroll { flex: 1; min-height: 0; overflow-y: auto; position: relative; }
+.dt-col { width: 700px; max-width: calc(100% - 132px); margin: 0 auto; padding: 16px 0 130px; }
+.dt-h1 { font: 600 25.5px/1.3 var(--font-body); margin: 0 0 9px; letter-spacing: -.005em; outline: none; border-radius: 6px; }
+.dt-h1:focus { box-shadow: 0 0 0 2px var(--border); }
+.dt-meta { display: flex; flex-wrap: wrap; gap: 5px 16px; align-items: center; font-size: 12.5px; color: var(--text-muted); margin-bottom: 14px; }
+.dt-meta span { display: inline-flex; gap: 6px; align-items: center; }
+.dt-meta span > i { width: 7px; height: 7px; border-radius: 50%; background: var(--text-faint); }
+.dt-meta .rec { color: var(--danger); font-weight: 500; }
+.dt-meta .rec > i { background: var(--danger); }
+.dt-empty { margin: 28px 0; color: var(--text-faint); font-size: 13px; line-height: 1.7; }
+.dt-empty.big { margin: auto; padding: 0 32px; text-align: center; max-width: 440px; }
+.dt-err { color: var(--danger); font-size: 12.5px; line-height: 1.6; }
+.dt-err:empty { display: none; }
+.dt-hint { margin-top: 12px; font-size: 12px; line-height: 1.6; color: var(--text-faint); }
+
+/* 转写:一句一行,时间在左边的空白里 */
+.dt-s { position: relative; padding: 5px 12px; margin: 0 -12px; border-radius: 8px; cursor: default; }
+.dt-s .ts { position: absolute; left: -54px; top: 10px; width: 52px; text-align: right; font: 11px/1.4 var(--font-mono); color: var(--text-faint); font-variant-numeric: tabular-nums; }
+.dt .dt-s button.ts:hover { color: var(--text); text-decoration: underline; }
+.dt-s .o { font: 15px/1.75 var(--font-body); overflow-wrap: anywhere; user-select: text; }
+.dt-s .t { font: 14px/1.75 var(--font-body); color: var(--text-muted); overflow-wrap: anywhere; user-select: text; }
+.dt-s.mark { background: color-mix(in srgb, var(--warning) 10%, transparent); }
+.dt-s.mark .ts { color: var(--warning); }
+.dt-s.sel { background: var(--overlay-light); }
+.dt-s.playing .ts { color: var(--accent); font-weight: 600; }
+.dt-s.low .o, .dt-s.low .t, .dt-s.fail .o { color: var(--text-faint); }
+.dt-s.live .o { color: var(--text-muted); }
+.dt-wait { color: var(--text-faint); font-size: 12.5px; }
+.dt .dt-link, .dt-mini .dt-link { margin-left: 8px; font-size: 12.5px; color: var(--text-muted); text-decoration: underline; text-underline-offset: 3px; }
+.dt-dots { display: inline-flex; gap: 3px; margin-left: 6px; vertical-align: 2px; } .dt-dots i { width: 4px; height: 4px; border-radius: 50%; background: var(--text-faint); } .dt-dots i:nth-child(2) { opacity: .6; } .dt-dots i:nth-child(3) { opacity: .3; }
+.dt-caret { display: inline-block; width: 1.5px; height: 1.05em; background: var(--text); vertical-align: -3px; margin-left: 2px; }
+.dt-tag { display: inline-flex; align-items: center; height: 18px; padding: 0 7px; margin-left: 8px; border-radius: 999px; border: 1px solid var(--border); font: 11px/1 var(--font-ui); color: var(--text-faint); vertical-align: 2px; white-space: nowrap; }
+.dt-fix { text-decoration: underline; text-decoration-thickness: 1px; text-underline-offset: 4px; text-decoration-color: color-mix(in srgb, var(--text) 38%, transparent); }
+.dt-acts { display: flex; flex-wrap: wrap; align-items: center; gap: 2px; margin: 6px 0 2px -8px; }
+.dt .dt-acts button { height: 24px; padding: 0 8px; border-radius: 6px; font-size: 12px; color: var(--text-muted); display: inline-flex; align-items: center; gap: 5px; white-space: nowrap; }
+.dt .dt-acts button:hover, .dt .dt-acts button.on { background: var(--bg-card); color: var(--text); }
+.dt .dt-acts button svg { width: 12px; height: 12px; }
+.dt-fixes { flex-basis: 100%; display: flex; flex-wrap: wrap; align-items: center; gap: 2px; }
+.dt-fixnote { font-size: 12px; color: var(--text-faint); margin: 0 2px 0 8px; }
+[data-display="original"] .dt-s .t { display: none; }
+[data-display="paired"] .dt-s { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 0 26px; }
+[data-display="paired"] .dt-s .t { font-size: 15px; color: var(--text); }
+[data-display="paired"] .dt-s .dt-acts, [data-display="paired"] .dt-s.live .o { grid-column: 1 / -1; }
+.dt .dt-jump { position: sticky; bottom: 76px; left: 50%; transform: translateX(-50%); height: 28px; padding: 0 12px; border-radius: 999px; background: var(--bg-card); border: 1px solid var(--border); box-shadow: var(--card-shadow); font-size: 12px; color: var(--text-muted); display: inline-flex; align-items: center; gap: 6px; }
+.dt .dt-jump[hidden] { display: none; }
+
+/* 底部悬浮条:录音中 / 回放 */
+.dt-dock { position: absolute; left: 50%; bottom: 16px; transform: translateX(-50%); display: flex; align-items: center; gap: 10px; height: 46px; max-width: calc(100% - 24px); padding: 0 8px 0 16px; border-radius: 999px; background: var(--bg-card); border: 1px solid var(--border); box-shadow: var(--card-shadow), 0 12px 32px -14px rgba(0, 0, 0, .22); white-space: nowrap; z-index: 3; }
+.dt-dock .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--danger); box-shadow: 0 0 0 4px color-mix(in srgb, var(--danger) 16%, transparent); }
+.dt-dock.paused .dot { background: var(--text-faint); box-shadow: none; }
+.dt-dock .tm { font: 500 13px/1 var(--font-ui); font-variant-numeric: tabular-nums; }
+.dt-dock .tm em { font-style: normal; font-weight: 400; color: var(--text-faint); }
+.dt-wave { display: flex; align-items: center; gap: 2px; height: 22px; } .dt-wave i { width: 2px; border-radius: 1px; background: var(--text-muted); }
+.dt-dock .sep { width: 1px; height: 18px; background: var(--border); }
+.dt .dt-dock .ib { width: 30px; height: 30px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; color: var(--text-muted); }
+.dt .dt-dock .ib:hover { background: var(--overlay-light); color: var(--text); }
+.dt .dt-dock .end { height: 30px; padding: 0 14px; border-radius: 999px; background: var(--action-fill); color: var(--on-action); font-size: 12.5px; font-weight: 500; display: inline-flex; gap: 6px; align-items: center; }
+.dt .dt-dock .end svg { width: 11px; height: 11px; fill: currentColor; stroke: none; }
+.dt .dt-dock .play { width: 30px; height: 30px; border-radius: 50%; background: var(--action-fill); color: var(--on-action); display: inline-flex; align-items: center; justify-content: center; margin-left: -8px; }
+.dt .dt-dock .play svg { width: 12px; height: 12px; fill: currentColor; stroke: none; }
+.dt-track { width: 300px; min-width: 60px; flex: 1 1 300px; height: 16px; accent-color: var(--text); }
+.dt .dt-dock .spd { height: 26px; min-width: 42px; padding: 0 9px; border-radius: 999px; font: 500 12px var(--font-ui); color: var(--text-muted); background: var(--overlay-light); margin-right: 4px; }
+
+/* 笔记 / 纪要:照笔记的排版 */
+.dt-notes { margin-top: 6px; }
+.dt-note { display: flex; gap: 10px; align-items: baseline; padding: 5px 0; font: 15px/27px var(--font-body); }
+.dt-note .tx { flex: 1; min-width: 0; overflow-wrap: anywhere; user-select: text; }
+.dt .dt-x, .dt-set .dt-x { width: 22px; height: 22px; border-radius: 6px; display: inline-flex; align-items: center; justify-content: center; color: var(--text-faint); opacity: 0; }
+.dt-note:hover .dt-x, .dt .dt-x:focus-visible, .dt-terms div:hover .dt-x, .dt-set .dt-x:focus-visible { opacity: 1; }
+.dt .dt-x:hover, .dt-set .dt-x:hover { background: var(--overlay-light); color: var(--text); }
+.dt-note-in { width: 100%; height: 38px; margin-top: 10px; padding: 0 12px; border-radius: 10px; border: 1px solid var(--border); background: var(--bg-card); color: var(--text); font: 14px var(--font-body); }
+.dt-cite { display: inline-flex; align-items: center; height: 20px; padding: 0 7px; margin: 0 2px 0 6px; border-radius: 999px; background: var(--overlay-light); font: 11.5px/1 var(--font-mono); color: var(--text-muted); vertical-align: 2px; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.dt-note .dt-cite { margin-left: 0; }
+.dt button.dt-cite:hover, .dt-side button.dt-cite:hover { color: var(--text); box-shadow: inset 0 0 0 1px var(--border); }
+.dt-md { font: 15px/27px var(--font-body); user-select: text; }
+.dt-md h2 { font: 600 20.25px/1.3 var(--font-body); margin: 30px 0 8px; }
+.dt-md > :first-child { margin-top: 0; }
+.dt-md p { margin: 10px 0; }
+.dt-md ul { margin: 6px 0; padding-left: 22px; } .dt-md li { margin: 1.5px 0; }
+.dt-md ul.todo { list-style: none; padding-left: 2px; } .dt-md ul.todo li { display: flex; gap: 10px; align-items: baseline; }
+.dt-md ul.todo li > i { width: 14px; height: 14px; flex: none; border-radius: 4px; box-shadow: inset 0 0 0 1.5px var(--text-faint); position: relative; top: 2px; }
+.dt-gen { margin-top: 26px; display: flex; flex-wrap: wrap; gap: 8px; align-items: center; font-size: 12px; color: var(--text-faint); }
+.dt .dt-btn { height: 28px; padding: 0 12px; border-radius: 8px; border: 1px solid var(--border); background: var(--bg-card); color: var(--text); font-size: 12.5px; }
+.dt .dt-btn:hover { background: var(--overlay-light); }
+
+/* 并排:转写和笔记 */
+.dt-chead { flex: none; padding: 14px 28px 0; border-bottom: 1px solid var(--border); }
+.dt-two { flex: 1; min-height: 0; display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+.dt-two > .dt-scroll + .dt-scroll { border-left: 1px solid var(--border); }
+.dt-two .dt-col { width: auto; max-width: none; margin: 0; padding: 12px 22px 130px 28px; }
+.dt-two .dt-s { padding-left: 56px; } .dt-two .dt-s .ts { left: 0; width: 46px; text-align: left; padding-left: 12px; }
+.dt-two .dt-s .o { font-size: 14px; } .dt-two .dt-s .t { font-size: 13.5px; }
+
+/* 窄的时候(右栏开着、窗口小):时间挪到句子上面,不再占左边的空白 */
+@container (max-width: 620px) {
+  .dt-col { max-width: calc(100% - 40px); }
+  .dt-s .ts, .dt-two .dt-s .ts { position: static; display: block; width: auto; text-align: left; padding: 0; margin-bottom: 1px; }
+  .dt-two .dt-s { padding-left: 12px; }
+  .dt-two { grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(0, 1fr) minmax(0, 1fr); }
+  .dt-two > .dt-scroll + .dt-scroll { border-left: 0; border-top: 1px solid var(--border); }
+  .dt-track { flex-basis: 80px; }
+  .dt-wave, .dt-dock .sep { display: none; }
+}
+
+/* 开始 */
+.dt-start { width: 420px; max-width: calc(100% - 40px); margin: 72px auto 40px; }
+.dt-start h1 { font: 600 22px/1.3 var(--font-ui); margin: 0 0 6px; }
+.dt-start > p { margin: 0 0 26px; color: var(--text-muted); font-size: 13px; line-height: 1.6; }
+.dt-row { display: flex; align-items: center; gap: 12px; min-height: 44px; border-bottom: 1px solid var(--border); }
+.dt-row > label { flex: 1; min-width: 96px; color: var(--text-muted); display: flex; flex-direction: column; gap: 2px; padding: 8px 0; }
+.dt-row > label small { font-size: 12px; line-height: 1.5; color: var(--text-faint); }
+.dt-start .dt-row > label { flex: none; width: 108px; }
+.dt-start .dt-row > :last-child { margin-left: auto; }
+.dt-in { flex: 1; min-width: 0; height: 28px; padding: 0 10px; border-radius: 8px; border: 1px solid var(--border); background: var(--bg-card); color: var(--text); font: 13px var(--font-ui); }
+.dt-row.note { border: 0; min-height: 0; padding: 7px 0 0; font-size: 12px; line-height: 1.6; color: var(--text-faint); }
+.dt-sw { appearance: none; -webkit-appearance: none; flex: none; width: 32px; height: 19px; margin: 0; border-radius: 999px; background: var(--border); position: relative; cursor: pointer; transition: background .15s; }
+.dt-sw::after { content: ''; position: absolute; left: 2px; top: 2px; width: 15px; height: 15px; border-radius: 50%; background: var(--bg-card); box-shadow: 0 1px 2px rgba(0, 0, 0, .2); transition: transform .15s; }
+.dt-sw:checked { background: var(--action-fill); } .dt-sw:checked::after { transform: translateX(13px); background: var(--on-action); }
+.dt .dt-go, .dt-mini .dt-go { margin-top: 26px; width: 100%; height: 38px; border-radius: 10px; background: var(--action-fill); color: var(--on-action); font-size: 13.5px; font-weight: 500; display: inline-flex; align-items: center; justify-content: center; gap: 8px; }
+.dt .dt-alt { margin-top: 10px; width: 100%; height: 34px; border-radius: 10px; color: var(--text-muted); font-size: 13px; display: inline-flex; align-items: center; justify-content: center; gap: 7px; }
+.dt .dt-alt:hover { background: var(--overlay-light); color: var(--text); }
+.dt-start .dt-err { margin-top: 14px; }
+
+/* 「…」菜单:用样式钉在顶栏右下,不算坐标(界面缩放不是 100% 时也不会偏) */
+.dt-menu { position: absolute; top: 38px; right: 10px; z-index: 5; min-width: 216px; padding: 5px; border-radius: 12px; background: var(--bg-card); border: 1px solid var(--border); box-shadow: var(--card-shadow), 0 14px 34px -14px rgba(0, 0, 0, .24); }
+.dt-mh { padding: 7px 10px 3px; font-size: 11.5px; color: var(--text-faint); }
+.dt .dt-mi { display: flex; align-items: center; gap: 8px; width: 100%; height: 30px; padding: 0 10px 0 6px; border-radius: 7px; font-size: 13px; text-align: left; white-space: nowrap; }
+.dt .dt-mi:hover { background: var(--overlay-light); }
+.dt .dt-mi.danger { color: var(--danger); }
+.dt-mi .ck { width: 14px; height: 14px; display: inline-flex; flex: none; }
+.dt-msep { height: 1px; margin: 5px 0; background: var(--border); }
+
+/* 底部面板里的字幕 */
+.dt-capview .dt-col { width: auto; max-width: none; margin: 0; padding: 8px 22px 14px 76px; }
+.dt-capview .dt-s .o { font-size: 14.5px; line-height: 1.6; } .dt-capview .dt-s .t { font-size: 14px; line-height: 1.6; color: var(--text-muted); }
+.dt-capview .dt-jump { bottom: 8px; }
+
+/* 右栏 */
+.dt-side { height: 100%; padding: 8px; display: flex; flex-direction: column; overflow-y: auto; position: relative; }
+.dt-chat-host { flex: 1; min-height: 0; position: relative; }
+.dt-chat-host[hidden], .dt-side .dt-empty[hidden] { display: none; }
+.dt-side .dt-empty { margin: auto 12px; text-align: center; font-size: 12.5px; }
+.dt-sugg { flex: none; display: flex; flex-wrap: wrap; gap: 6px; padding: 8px 2px 2px; }
+.dt-sugg:empty { display: none; }
+.dt-side .dt-sugg button { height: 28px; padding: 0 11px; border-radius: 999px; border: 1px solid var(--border); background: var(--bg-card); font-size: 12.5px; color: var(--text-muted); }
+.dt-side .dt-sugg button:hover { color: var(--text); background: var(--overlay-light); }
+.dt-side .dt-ask { flex: none; height: 40px; margin-top: 8px; padding: 0 14px; border-radius: 14px; border: 1px solid var(--border); background: var(--bg-card); box-shadow: var(--card-shadow); color: var(--text-faint); font-size: 13px; text-align: left; cursor: text; }
+.dt-side .dt-ask[hidden] { display: none; }
+.dt-side .dt-sugg { margin-top: auto; }
+.dt-side .dt-chat-host:not([hidden]) ~ .dt-sugg { margin-top: 0; }
+.dt-side-h { font-size: 12px; font-weight: 500; color: var(--text-muted); padding: 8px 8px 6px; }
+.dt-side.dt-ol .row { display: flex; gap: 10px; align-items: baseline; width: 100%; flex: none; padding: 0 8px; height: 30px; border-radius: 6px; font-size: 12.5px; color: var(--text-muted); text-align: left; }
+.dt-ol .row span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.dt-ol .row time { font: 11px var(--font-mono); color: var(--text-faint); width: 38px; flex: none; font-variant-numeric: tabular-nums; }
+.dt-side.dt-ol .row:hover { background: var(--overlay-light); color: var(--text); }
+
+/* Mini 小窗:窗口可以被拖到 260×160,所以内容自己滚,不按固定大小写 */
+.dt-mini { position: absolute; inset: 0; display: flex; flex-direction: column; gap: 8px; padding: 10px 12px 12px; overflow: hidden; }
+.dt-mini .hd { flex: none; display: flex; align-items: center; gap: 8px; min-height: 26px; font-size: 12px; color: var(--text-muted); white-space: nowrap; }
+.dt-mini .hd .dot { width: 7px; height: 7px; flex: none; border-radius: 50%; background: var(--danger); } .dt-mini .hd .dot.off { background: var(--text-faint); }
+.dt-mini .hd .tm { font-weight: 500; color: var(--text); font-variant-numeric: tabular-nums; }
+.dt-mini .hd .st { overflow: hidden; text-overflow: ellipsis; }
+.dt-mini .hd button { width: 26px; height: 26px; flex: none; border-radius: 6px; display: inline-flex; align-items: center; justify-content: center; color: var(--text-muted); }
+.dt-mini .hd button:hover { background: var(--overlay-light); color: var(--text); }
+.dt-mini .lines { flex: 1; min-height: 0; overflow-y: auto; display: flex; flex-direction: column; gap: 6px; }
+.dt-mini .lines > :first-child { margin-top: auto; }
+.dt-mini .ln .o { font: 14px/1.55 var(--font-body); overflow-wrap: anywhere; } .dt-mini .ln .t { font: 13px/1.55 var(--font-body); color: var(--text-muted); overflow-wrap: anywhere; }
+.dt-mini .ln.prev .o { color: var(--text-muted); font-size: 13px; } .dt-mini .ln.prev .t { color: var(--text-faint); font-size: 12.5px; }
+.dt-mini .ln.live .o { color: var(--text-faint); }
+.dt-mini .ln.mark { padding: 2px 8px; margin: 0 -8px; border-radius: 8px; background: color-mix(in srgb, var(--warning) 10%, transparent); }
+.dt-mini .dt-empty { margin: auto 0; text-align: center; font-size: 12.5px; }
+.dt-mini .dt-go { margin-top: 0; flex: none; }
+.dt-mini .dt-note-in { flex: none; height: 32px; margin-top: 0; font-size: 13px; }
+.dt-mini .dt-note-in[hidden] { display: none; }
+
+/* 设置页(宿主不给样式重置,所以这里自己带全) */
+.dt-set { max-width: 640px; }
+.dt-set-h { margin: 22px 0 8px; font-size: 12px; font-weight: 500; color: var(--text-muted); }
+.dt-set-h:first-child { margin-top: 4px; }
+.dt-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; margin-bottom: 8px; }
+.dt-set .dt-card { display: flex; flex-direction: column; gap: 4px; padding: 12px; border-radius: 12px; border: 1px solid var(--border); background: var(--bg-card); text-align: left; }
+.dt-set .dt-card.on { border-color: var(--text); box-shadow: 0 0 0 1px var(--text); }
+.dt-card b { font-size: 13px; font-weight: 500; } .dt-card small { font-size: 12px; line-height: 1.5; color: var(--text-muted); }
+.dt-card .pic { height: 54px; margin-bottom: 6px; border-radius: 6px; background: var(--overlay-light); display: grid; gap: 3px; padding: 5px; }
+.dt-card .pic i { border-radius: 3px; background: color-mix(in srgb, var(--text) 16%, transparent); }
+.dt-card .pic.transcript { grid-template-columns: 1fr; } .dt-card .pic.transcript i:nth-child(n+2) { display: none; }
+.dt-card .pic.notes { grid-template-rows: 2fr 1fr; } .dt-card .pic.notes i:nth-child(2) { background: color-mix(in srgb, var(--text) 34%, transparent); } .dt-card .pic.notes i:nth-child(3) { display: none; }
+.dt-card .pic.split { grid-template-columns: 1fr 1fr; } .dt-card .pic.split i:nth-child(3) { display: none; }
+.dt-terms div { display: grid; grid-template-columns: minmax(0, 1fr) 20px minmax(0, 1fr) 24px; gap: 8px; align-items: center; min-height: 34px; border-bottom: 1px solid var(--border); }
+.dt-terms span:nth-child(2) { color: var(--text-faint); }
