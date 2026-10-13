@@ -79,7 +79,7 @@ try {
     assert.ok(!M.alreadyIn('今日は量子力学です。', 'zh')); assert.ok(!M.alreadyIn('Hello', 'ja'))
   })
   test('没人说话时识别吐出来的东西当成空的', () => {
-    for (const s of ['', '.', 'The.', '嗯。', ' uh ', 'A']) assert.ok(M.isJunk(s), s)
+    for (const s of ['', '.', 'The.', '嗯。', ' uh ', 'A', 'Thank.', 'Thank you.']) assert.ok(M.isJunk(s), s)
     for (const s of ['Okay, so.', 'The atom.', '好的。']) assert.ok(!M.isJunk(s), s)
   })
   test('术语表:整词替换、不分大小写、不碰别的词', () => {
@@ -138,6 +138,51 @@ try {
     assert.equal(b.length, 52); assert.equal(String.fromCharCode(...b.subarray(0, 4)), 'RIFF'); assert.equal(dv.getUint32(24, true), 16000); assert.equal(dv.getInt16(46, true), 32767); assert.equal(dv.getInt16(48, true), -32768)
     assert.equal(V.base64(new Uint8Array([104, 105])), 'aGk=')
   })
+
+  // ── 落盘:用内存里的假库跑引擎里不碰麦克风的那几条路(代码评审里查出来会丢数据的地方)──
+  {
+    const files = new Map(); let gate = Promise.resolve()
+    globalThis.window = globalThis
+    globalThis.ctx = {
+      app: {
+        readFile: async (p) => files.get(p) ?? null, writeFile: async (p, s) => { files.set(p, s) }, workFolder: () => '谛听', vaultRoot: () => '/v',
+        trash: async (f) => { for (const k of [...files.keys()]) if (k.startsWith(`${f}/`)) files.delete(k) },
+      },
+      tangu: { complete: async () => { await gate; return { text: '<source>今天讲拉比频率。</source><translation>T</translation>' } } },
+      notify() {},
+    }
+    await build({ stdin: { contents: `export * as E from './src/engine'; export * as St from './src/store'; export { S } from './src/state'`, resolveDir: process.cwd(), loader: 'ts' }, bundle: true, format: 'esm', outfile: join(dir, 'owner.mjs'), logLevel: 'silent' })
+    const { E, St, S } = await load('owner.mjs')
+    const seed = (id, extra = {}) => {
+      const folder = `谛听/${id}`
+      const rec = { ...M.newRec({ id, folder, title: id, now: new Date('2026-10-01T08:00:00Z'), source: 'mic', target: '' }), status: 'done', segments: [{ id: 1, start: 0, end: 2, text: '今天讲拉比频率。' }], ...extra }
+      files.set(`${folder}/.record.json`, JSON.stringify(rec))
+      return M.rowOf(rec)
+    }
+    const rows = [seed('a'), seed('b'), seed('c', { target: 'en', segments: [{ id: 1, start: 0, end: 2, text: '今天讲拉比频率。', tr: 'old', trState: 'done' }] }), seed('d', { status: 'live' })]
+    files.set('谛听/.diting-index.json', JSON.stringify(rows))
+    const settle = async () => { for (let i = 0; i < 5; i++) { await new Promise((r) => setTimeout(r, 5)); await St.queued(async () => undefined) } }
+    const disk = (id) => JSON.parse(files.get(`谛听/${id}/.record.json`) || 'null')
+    const pass = (name) => { n++; console.log(`✓ ${name}`) }
+
+    await Promise.all([St.init(), St.init()]); await settle()
+    assert.equal(S.index.length, 4); assert.equal(disk('d').status, 'done')
+    pass('开场:读列表,上次没收尾的记录改成已结束')
+
+    await Promise.all([E.apply({ c: 'note', rec: 'a', text: '第一条', t: 1 }), E.apply({ c: 'note', rec: 'a', text: '第二条', t: 2 })]); await settle()
+    assert.deepEqual(disk('a').notes.map((x) => x.text), ['第一条', '第二条'])
+    pass('同时到的两条修改都留得住(主窗口里一条记录只有一个对象)')
+
+    await E.apply({ c: 'target', rec: 'c', target: 'ja' }); await settle()
+    assert.equal(disk('c').segments[0].tr, 'T'); assert.equal(disk('c').trLang, 'ja')
+    pass('换翻译语言:已有的译文重译,不留旧语言的')
+
+    let open; gate = new Promise((r) => { open = r })
+    await E.apply({ c: 'target', rec: 'b', target: 'en' })
+    await E.apply({ c: 'delete', rec: 'b' }); open(); await settle()
+    assert.equal(disk('b'), null); assert.ok(!S.index.some((r) => r.id === 'b')); assert.ok(!JSON.parse(files.get('谛听/.diting-index.json')).some((r) => r.id === 'b'))
+    pass('删掉的记录:还在路上的翻译回来以后不会把它写回去')
+  }
 
   test('发布物:main.js 就是当前源码打出来的,版本号对得上', async () => 0)
   const out = await build({ ...options, write: false, minify: true, logLevel: 'silent' })

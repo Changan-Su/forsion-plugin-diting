@@ -13,7 +13,7 @@ A Forsion plugin that turns what you hear in a class, meeting or interview into 
 - **纪要和章节**:结束后自动写(课堂 / 会议 / 访谈三种写法),每条要点带时间。
 - **回放**:保留了录音的话,点任何一个时间就从那里听。
 - **导入**:已有的音频 / 视频文件(两小时以内)可以转成同样的记录。
-- **后台和小窗**:切到别的 Space、关掉标签页、把主窗口收进托盘都不会停;「谛听:打开小窗」把字幕放在一边。
+- **后台和小窗**:切到别的 Space、关掉标签页、把主窗口收进托盘都不会停;「谛听：打开小窗」把字幕放在一边。
 - **三种布局**:转写为主 / 笔记为主(转写在底部面板里滚)/ 并排。
 
 ## 存在哪里
@@ -49,6 +49,8 @@ npm install
 node build.mjs          # src/ → main.js(要提交,商店安装时不构建)
 node check.mjs          # 纯逻辑自检:切句、数据模型、文案成对、发布物和源码一致
 node verify/smoke.cjs   # 真应用冒烟:隔离的家目录 + 文件当麦克风,全程不出声(要同级有 Forsion-Genesis/desktop)
+node verify/slice-probe.mjs <16k 单声道 wav>   # 把一段真实录音喂给切句器,看切成了多长的句子(不开界面)
+node verify/live-prompts.mjs   # 真引擎 × 真模型跑翻译 / 纪要 / 随包 Agent 的提示词(烧订阅额度)
 sh install.sh           # 装进 ~/.forsion-dev(sh install.sh prod 装进 ~/.forsion)
 ```
 

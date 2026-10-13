@@ -4,6 +4,7 @@
  *
  *   node build.mjs && node verify/smoke.cjs
  *   DITING_WAV=/path/to/16k-mono.wav node verify/smoke.cjs     # 换成真实录音(默认用系统的 say 合成几句中文)
+ *   DITING_TARGET=zh …                                          # 翻译成哪种语言(默认 en;英文录音要给 zh,不然不用翻)
  *   KEEP=1 …                                                    # 跑完留着临时目录
  *   HIDE_MS=330000 …                                            # 窗口隐藏那两段各等多久(默认 25 秒;超过 5 分钟才碰得到 Chromium 对长时间隐藏页面的重度降频)
  *   REAL_AI=1 [REAL_MODEL=codex/gpt-6-luna] …                   # 翻译 / 纪要转给真引擎 + 真模型(真烧订阅额度:每句一次小调用);
@@ -99,9 +100,12 @@ async function main() {
       inline.push(body)
       if (REAL) {
         const t0 = Date.now()
-        const r = await fetch(`${REAL.base}/agent/inline`, { method: 'POST', headers: { Authorization: `Bearer ${REAL.token}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ ...body, model_id: REAL.model }), signal: AbortSignal.timeout(180_000) })
-        const text = await r.text(); REAL.ms.push(Date.now() - t0)
-        return r.ok ? { __buffer: Buffer.from(text), contentType: 'text/event-stream' } : { __code: r.status, body: { detail: text.slice(0, 200) } }
+        // 收尾时真引擎先关了、还有请求在路上:当成一次失败回给页面,别让脚本自己崩掉。
+        try {
+          const r = await fetch(`${REAL.base}/agent/inline`, { method: 'POST', headers: { Authorization: `Bearer ${REAL.token}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ ...body, model_id: REAL.model }), signal: AbortSignal.timeout(180_000) })
+          const text = await r.text(); REAL.ms.push(Date.now() - t0)
+          return r.ok ? { __buffer: Buffer.from(text), contentType: 'text/event-stream' } : { __code: r.status, body: { detail: text.slice(0, 200) } }
+        } catch (e) { return { __code: 503, body: { detail: String(e && e.message || e).slice(0, 200) } } }
       }
       const sel = String(body.selection || '')
       if (String(body.instruction || '').includes('"chapters"')) return sse(JSON.stringify({ lead: '这一讲讲了二能级原子和辐射场。', points: [{ t: '00:02', text: '把电场写成单色平面波' }, { t: '00:09', text: '旋转波近似' }], todos: [], terms: [{ term: '拉比频率', meaning: '布居数振荡的频率', t: '00:15' }], chapters: [{ t: '00:00', title: '开场' }, { t: '00:09', title: '旋转波近似' }] }))
@@ -144,7 +148,8 @@ async function main() {
     mainUrl = win.url().split('#')[0]
     await mainWin('setContentSize', 1440, 900)
     await win.waitForTimeout(2000)
-    await win.evaluate(() => { localStorage.setItem('diting.test', '1'); localStorage.setItem('plugin.diting.target', 'en') })
+    // 合成的那几句是中文,翻成英文;换成真实录音时用 DITING_TARGET 指定(英文课要翻成中文就给 zh)。
+    await win.evaluate((target) => { localStorage.setItem('diting.test', '1'); localStorage.setItem('plugin.diting.target', target) }, process.env.DITING_TARGET || 'en')
     await win.reload(); await win.waitForSelector('#root', { timeout: 30_000 }); await win.waitForTimeout(2500)
     for (const label of ['跳过引导', 'Skip']) { const b = win.locator(`text=${label}`).first(); if (await b.count().catch(() => 0)) { await b.click().catch(() => {}); break } }
     await win.waitForSelector('.dv-groupview', { timeout: 30_000 })
@@ -172,14 +177,15 @@ async function main() {
     await until('开始录', (s) => s.phase === 'live')
     const first = await until('识别出两句', (s) => s.segs >= 2, 40_000)
     ok('麦克风 → 切句 → 识别', first.segs >= 2, first.texts.slice(0, 2).join(' / '))
-    const tr = await until('翻译出来', (s) => s.tr >= 1, 20_000).then((s) => s, () => null)
-    ok('翻译(假引擎回话)', !!tr, `一次性补全被调了 ${inline.length} 次`)
+    const tr = await until('翻译出来', (s) => s.tr >= 1, REAL ? 60_000 : 20_000).then((s) => s, () => null)
+    ok(REAL ? '翻译(真模型)' : '翻译(假引擎回话)', !!tr, `一次性补全被调了 ${inline.length} 次`)
     await shot('02-live')
 
     // ② 后台:三种「不在眼前」
     {
       const a = await state(); await enter('笔记'); await sleep(12_000); const b = await state(); await enter('谛听')
-      ok('切到别的 Space 时继续录', b.seconds - a.seconds > 10 && b.segs > a.segs, `12 秒里时间轴走了 ${(b.seconds - a.seconds).toFixed(1)} 秒,句子 ${a.segs} → ${b.segs}`)
+      // 真实录音里一句话可以说十几秒,12 秒里不一定正好说完一句;合成的那几句短,必须有新句子。
+      ok('切到别的 Space 时继续录', b.seconds - a.seconds > 10 && (process.env.DITING_WAV ? b.segs >= a.segs : b.segs > a.segs), `12 秒里时间轴走了 ${(b.seconds - a.seconds).toFixed(1)} 秒,句子 ${a.segs} → ${b.segs}`)
     }
     // Playwright 接着页面的时候,页面一直算「看得见」(它开了焦点模拟),量不到真的隐藏。
     // 所以这两段先把它断开(应用不受影响),只从主进程那头读页面里的状态,量完再接回来。
@@ -187,7 +193,9 @@ async function main() {
     const PROBE = `(() => { const t = window.__DITING_TEST__; return JSON.stringify({ seconds: t.S.seconds, segs: t.S.live ? t.S.live.segments.length : -1, hidden: document.visibilityState, phase: t.S.phase, error: t.S.error }) })()`
     const probe = async () => JSON.parse(await inPage(PROBE))
     const HIDE_MS = Number(process.env.HIDE_MS || 25_000)
-    const away = async (name, op) => {
+    // strict = 页面自己也得算作隐藏(这才碰得到浏览器对隐藏页面的降频,是难的那种情况)。
+    // 收进托盘那一段不强求:窗口确实不可见了,但页面有时仍然自认为「看得见」(六次里见过三次,宿主 / 系统的行为),那种情况下本来就不降频。
+    const away = async (name, op, strict) => {
       const a = await probe(); const t0 = Date.now(); await mainWin(op)
       // 页面知道自己被隐藏要一点时间:最多等 10 秒,等不到就照实记「没隐藏」。
       let mid = await probe(); for (let i = 0; i < 20 && mid.hidden !== 'hidden'; i++) { await sleep(500); mid = await probe() }
@@ -195,10 +203,10 @@ async function main() {
       const b = await probe(); const shown = await inMain('return w.isVisible()'); const wall = (Date.now() - t0) / 1000
       await mainWin('showInactive'); await sleep(800)
       const adv = b.seconds - a.seconds
-      ok(name, mid.hidden === 'hidden' && b.hidden === 'hidden' && shown === false && adv > wall * 0.9 && b.segs > mid.segs && b.phase === 'live', `页面可见性=${mid.hidden}→${b.hidden},窗口可见=${shown};墙上 ${wall.toFixed(0)} 秒,时间轴走了 ${adv.toFixed(1)} 秒,句子 ${a.segs} → ${b.segs}${b.error ? `;报错 ${b.error}` : ''}`)
+      ok(name, (strict ? mid.hidden === 'hidden' && b.hidden === 'hidden' : true) && shown === false && adv > wall * 0.9 && b.segs > mid.segs && b.phase === 'live', `页面可见性=${mid.hidden}→${b.hidden},窗口可见=${shown};墙上 ${wall.toFixed(0)} 秒,时间轴走了 ${adv.toFixed(1)} 秒,句子 ${a.segs} → ${b.segs}${b.error ? `;报错 ${b.error}` : ''}`)
     }
-    await away('窗口隐藏时继续录', 'hide')
-    await away('关掉主窗口(收进托盘)时继续录', 'close')
+    await away('窗口隐藏时继续录', 'hide', true)
+    await away('关掉主窗口(收进托盘)时继续录', 'close', false)
     win = await attach(); watch(win)
 
     // ③ Mini 小窗
@@ -280,7 +288,7 @@ async function main() {
       await mainWin('hide'); await sleep(1500)
       await mini.locator('[data-act="start"]').click()
       const s1 = await until('小窗发起的记录开始', (s) => s.phase === 'live', 20_000).then((s) => s, () => null)
-      const s2 = s1 ? await until('有内容', (s) => s.segs >= 1, 40_000).then((s) => s, () => null) : null
+      const s2 = s1 ? await until('有内容', (s) => s.segs >= 1, process.env.DITING_WAV ? 150_000 : 40_000).then((s) => s, () => null) : null
       ok('主窗口隐藏时从小窗开始记录', !!s2, s2 ? `页面可见性=${s2.hidden},${s2.segs} 句` : JSON.stringify(await state()))
       await mini.locator('[data-act="stop"]').click()
       ok('从小窗结束', (await until('结束', (s) => s.phase === 'idle', 90_000).then(() => true, () => false)))

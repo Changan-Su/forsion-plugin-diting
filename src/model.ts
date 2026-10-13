@@ -205,11 +205,11 @@ export function alreadyIn(text: string, target: string): boolean {
   return false
 }
 
-/** 识别结果里什么都没有(没人说话的片段会吐出「The.」「.」这类东西)。 */
+/** 识别结果里什么都没有(没人说话的片段会吐出「The.」「.」「Thank you.」这类东西)。 */
 export function isJunk(text: string): boolean {
   const bare = String(text || '').replace(/[\s\p{P}\p{S}]/gu, '')
   if (bare.length < 2) return true
-  return /^(the|a|an|uh|um|oh|yeah|okay|ok|嗯|啊|呃|그)$/i.test(bare)
+  return /^(the|a|an|uh|um|oh|yeah|okay|ok|you|thank|thanks|thankyou|嗯|啊|呃|그)$/i.test(bare)
 }
 
 /** 把术语表套到一句话上(不分大小写)。英文这类有空格的按整词换;中日韩文字没有词的边界,直接按字换。没变就是原句。 */
