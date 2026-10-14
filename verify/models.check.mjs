@@ -56,6 +56,9 @@ try {
   setPref('fix',true);requests.length=0;await E.apply({c:'model',rec:rec.id,kind:'translation',value:'mt',scope:'all'});await settle();assert.ok(requests.length===2&&requests.every(r=>r.mode==='translate'&&r.modelId==='mt'));pass('Dedicated translation model stays selected when correction is enabled')
   await E.apply({c:'term',from:'cromers',to:'Kramers'});assert.equal(M.applyTerms('cromers relation',JSON.parse(storage.get('plugin.diting.terms'))),'Kramers relation');await E.apply({c:'termRemove',from:'cromers'});assert.deepEqual(JSON.parse(storage.get('plugin.diting.terms')),{});pass('Glossary additions and removals reach the recognition dictionary')
   delayed=true;A.translate(rec,rec.segments[0]);await settle();const off=pending.splice(0);await E.apply({c:'target',rec:rec.id,target:'',scope:'future'});off.forEach(p=>p.resolve({text:'After Off'}));await settle();assert.notEqual(rec.segments[0].tr,'After Off');pass('Translation Off cancels pending results and retains completed content')
+  const abandoned={...M.newRec({id:'abandoned',folder:'Diting/abandoned',title:'Interrupted translation',now:new Date(),source:'mic',target:'zh'}),status:'done',segments:[{id:1,start:0,end:1,text:'Source.',tr:'Previous translation',trState:'wait'}]}
+  files.set('Diting/abandoned/.record.json',JSON.stringify(abandoned))
+  const recovered=await Store.loadRec('Diting/abandoned');assert.equal(recovered.segments[0].trState,'fail');assert.equal(recovered.segments[0].tr,'Previous translation');pass('Abandoned translations become retryable after owner restart, retaining previous text')
   const catalog=ctx.tangu.modelCatalog; delete ctx.tangu.modelCatalog
   globalThis.tangu={getConfig:async()=>({asrBackend:'local',asrModelId:'old-model'})}
   assert.equal((await Models.resolveModel('asr')).id,'');await assert.rejects(Models.resolveModel('asr','local'))
