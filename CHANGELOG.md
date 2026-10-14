@@ -1,5 +1,19 @@
 # 更新记录
 
+## 0.3.0 — 2026-10-14（源码，未发布 / Source, unreleased）
+
+- Space 内分别选择转文字与翻译模型，可跟随宿主设置或设为 Space 默认；全局设置保持原值
+- 翻译模型与语言切换支持仅后续句子、后续和失败项、重译已有内容；迟到结果不会覆盖新译文
+- 批量重试失败项；可恢复的转写失败与翻译失败一起处理，完成的句子保持原样
+- Space 直接添加、删除术语；每句保留实际模型与译文语言，旧记录兼容读取
+- 专用翻译模型不支持纠错时明确提示，不会改用聊天模型
+
+- Choose transcription and translation models in Space; follow host settings or save Space defaults without changing global slots.
+- Apply translation changes to future sentences, future and failed items, or all existing content. Late results cannot overwrite replacements.
+- Retry failed transcription and translation items in one action; completed sentences retain their content.
+- Add and remove glossary terms in Space. Sentence model receipts and translation languages survive reload.
+- Dedicated translation models remain selected when correction is enabled; their limitation is shown.
+
 ## 0.2.0 — 2026-10-13
 
 - 翻译改用 Forsion 的「翻译」模型(设置 → 模型 → 翻译;没选就用聊天当前的模型),不再固定用聊天模型。要比 2.13.3 更新的桌面版本才生效;2.13.3 和更早的版本上和 0.1.1 一样

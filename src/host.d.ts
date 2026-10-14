@@ -53,22 +53,26 @@ declare const ctx: {
   notify?(message: string, opts?: { level?: 'info' | 'success' | 'warning' | 'error' }): void
   getLocale?(): 'zh' | 'en'
   subscribeLocale?(cb: (locale: 'zh' | 'en') => void): () => void
+  ui?: { mountModelPicker?(el: HTMLElement, options: HostModelPickerOptions): { update(patch: Partial<HostModelPickerOptions>): void; dispose(): void } }
   tangu?: {
+    modelCatalog?(kind: 'asr' | 'translation'): Promise<{ defaultModelId: string; models: Array<{ id: string; name: string; source: 'local' | 'forsion' | 'direct'; available: boolean; supportsCorrection: boolean }> }>
     agents?(): Array<{ slug: string; name: string }>
     mountChat?(el: HTMLElement, o?: { agent?: string; folder?: string; title?: string }): HostChatMount
-    complete?(req: { prompt: string; selection?: string; before?: string; after?: string; signal?: AbortSignal }): Promise<{ text: string }>
+    complete?(req: { prompt: string; selection?: string; before?: string; after?: string; modelId?: string; signal?: AbortSignal }): Promise<{ text: string; model?: { id: string; name: string; mt?: boolean } }>
     /** 只做翻译;模型取用户在「设置 → 模型 → 翻译」里选的那个(2.13.3 之后的桌面版本才有)。 */
-    translate?(req: { text: string; language: string; before?: string; signal?: AbortSignal }): Promise<{ text: string }>
+    translate?(req: { text: string; language: string; before?: string; modelId?: string; signal?: AbortSignal }): Promise<{ text: string; model?: { id: string; name: string; mt?: boolean } }>
   }
 }
 
 interface Window {
   tangu?: {
-    transcribeAudio?(req: { audioBase64: string; mime?: string; language?: string; timestamps?: boolean }): Promise<string | { text: string }>
-    getConfig?(): Promise<{ asrBackend?: string } | null>
+    transcribeAudio?(req: { audioBase64: string; mime?: string; modelId?: string; backend?: 'local' | 'cloud'; language?: string; timestamps?: boolean }): Promise<string | { text: string }>
+    getConfig?(): Promise<{ asrBackend?: string; asrModelId?: string } | null>
   }
   /** check.mjs / 冒烟用的出口(只在测试里设)。 */
   __DITING_TEST__?: Record<string, unknown>
 }
 
 declare module '*.css' { const text: string; export default text }
+
+interface HostModelPickerOptions { kind: 'asr' | 'translation'; value: string; label: string; followLabel: string; scopeKey?: string; disabled?: boolean; onChange(value: string): void }

@@ -1,6 +1,11 @@
 // 数据模型和纯函数(不碰 ctx、不碰 DOM;check.mjs 直接测)。
 
+export interface ModelReceipt { id: string; name: string; backend?: 'local' | 'cloud' }
+export type ChangeScope = 'future' | 'failed' | 'all'
 export interface Segment {
+  asrModel?: ModelReceipt
+  trModel?: ModelReceipt
+  trTarget?: string
   id: number
   /** 从记录开始算的秒数。 */
   start: number
@@ -32,6 +37,8 @@ export interface Rec {
   source: 'mic' | 'file'
   /** 翻译成什么;'' = 不翻译。 */
   target: string
+  asrModel?: string
+  translationModel?: string
   /** 录音的文件名(在 folder 里);没留就没有。 */
   audio?: string
   segments: Segment[]
@@ -94,6 +101,7 @@ export function reviveRec(raw: unknown, folder: string): Rec | null {
     v: 1, id: r.id, folder, title: typeof r.title === 'string' ? r.title : '', createdAt: typeof r.createdAt === 'string' ? r.createdAt : new Date(0).toISOString(),
     duration: num(r.duration), status: r.status === 'live' || r.status === 'paused' ? r.status : 'done', source: r.source === 'file' ? 'file' : 'mic', target: typeof r.target === 'string' ? r.target : '',
     audio: typeof r.audio === 'string' ? r.audio : undefined,
+    asrModel: typeof r.asrModel === 'string' ? r.asrModel : '', translationModel: typeof r.translationModel === 'string' ? r.translationModel : '', trLang: typeof r.trLang === 'string' ? r.trLang : r.target,
     segments: r.segments.filter((s) => s && typeof s.text === 'string').map((s, i) => ({ ...s, id: typeof s.id === 'number' ? s.id : i + 1, start: num(s.start), end: num(s.end) })),
     notes: Array.isArray(r.notes) ? r.notes.filter((n) => n && typeof n.text === 'string').map((n, i) => ({ id: typeof n.id === 'number' ? n.id : i + 1, t: num(n.t), text: n.text })) : [],
     chapters: Array.isArray(r.chapters) ? r.chapters.filter((c) => c && typeof c.title === 'string').map((c) => ({ t: num(c.t), title: c.title })) : [],
@@ -106,7 +114,7 @@ export function reviveRec(raw: unknown, folder: string): Rec | null {
 /** 给人看、也给 Tangu 读的转写:每句一段,时间在前;译文是紧跟着的引用块。 */
 export function transcriptMd(r: Rec): string {
   const head = `# ${r.title || '转写'}\n\n`
-  const body = r.segments.filter((s) => s.text).map((s) => `**[${clock(s.start)}]** ${s.text}${s.mark ? ' ★' : ''}${s.tr ? `\n\n> ${s.tr.replace(/\n+/g, ' ')}` : ''}`).join('\n\n')
+  const body = r.segments.filter((s) => s.text).map((s) => `**[${clock(s.start)}]** ${s.text}${s.mark ? ' ★' : ''}${s.tr ? `\n\n> ${s.trTarget && s.trTarget !== r.target ? `[${s.trTarget}] ` : ''}${s.tr.replace(/\n+/g, ' ')}` : ''}`).join('\n\n')
   return `${head}${body}\n`
 }
 

@@ -31,7 +31,7 @@ const { chromium } = require(path.join(DESK, 'node_modules/playwright-core'))
 const { startStubEngine } = require(path.join(DESK, 'scripts/lib/stub-engine.cjs'))
 const { synthMic } = require(path.join(DESK, 'scripts/lib/voice-fixture.cjs'))
 
-const SHOTS = path.join(HERE, '.shots'); fs.mkdirSync(SHOTS, { recursive: true })
+const SHOTS = process.env.SHOTS || path.join(HERE, '.shots'); fs.mkdirSync(SHOTS, { recursive: true })
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
 const freePort = () => new Promise((r) => { const s = net.createServer(); s.listen(0, '127.0.0.1', () => { const p = s.address().port; s.close(() => r(p)) }) })
 const results = []
@@ -93,10 +93,12 @@ async function main() {
   const REAL = process.env.REAL_AI === '1' ? await startRealEngine(home) : null
 
   // 假引擎:只多接一条一次性补全(翻译 / 纪要)
-  const inline = []
+  const inline = []; const cloudAsr = []; let cloudFailNext = 0
   const sse = (content) => ({ __buffer: Buffer.from(`data: ${JSON.stringify({ type: 'done', content, toolCallText: false })}\n\n`), contentType: 'text/event-stream' })
   const stub = await startStubEngine({
+    ...(process.env.MODEL_UI ? { models: [{ id: 'm1', name: 'Model A', provider: 'probe', source: 'direct', modelType: 'llm' }, { id: 'm2', name: 'Model B', provider: 'probe', source: 'direct', modelType: 'llm' }, { id: 'probe/speech', name: 'Speech probe', provider: 'probe', source: 'direct', modelType: 'asr' }], modelsMeta: { translateModels: [{ id: 'mt', name: 'Translation only', provider: 'probe' }] } } : REAL ? { models: [{ id: REAL.model, name: 'GPT 6 Luna', provider: 'Codex', source: 'direct', modelType: 'llm' }] } : {}),
     handle: async ({ path: p, method, body: read }) => {
+      if (p === '/audio/transcriptions' && method === 'POST') { const body = await read(); cloudAsr.push(body.__raw || ''); if (cloudFailNext) { cloudFailNext--; return { __code: 503, body: { detail: 'fixture ASR failure' } } } return { text: '今天我们讲拉比频率。', segments: [{ start: 0, end: 4, text: '今天我们讲拉比频率。' }] } }
       if (p !== '/agent/inline' || method !== 'POST') return undefined
       const body = await read()
       inline.push(body)
@@ -104,11 +106,12 @@ async function main() {
         const t0 = Date.now()
         // 收尾时真引擎先关了、还有请求在路上:当成一次失败回给页面,别让脚本自己崩掉。
         try {
-          const r = await fetch(`${REAL.base}/agent/inline`, { method: 'POST', headers: { Authorization: `Bearer ${REAL.token}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ ...body, model_id: REAL.model }), signal: AbortSignal.timeout(180_000) })
+          const r = await fetch(`${REAL.base}/agent/inline`, { method: 'POST', headers: { Authorization: `Bearer ${REAL.token}`, 'Content-Type': 'application/json' }, body: JSON.stringify(body), signal: AbortSignal.timeout(180_000) })
           const text = await r.text(); REAL.ms.push(Date.now() - t0)
           return r.ok ? { __buffer: Buffer.from(text), contentType: 'text/event-stream' } : { __code: r.status, body: { detail: text.slice(0, 200) } }
         } catch (e) { return { __code: 503, body: { detail: String(e && e.message || e).slice(0, 200) } } }
       }
+      if (process.env.MODEL_UI) await sleep(100)
       const sel = String(body.selection || '')
       if (String(body.instruction || '').includes('"chapters"')) return sse(JSON.stringify({ lead: '这一讲讲了二能级原子和辐射场。', points: [{ t: '00:02', text: '把电场写成单色平面波' }, { t: '00:09', text: '旋转波近似' }], todos: [], terms: [{ term: '拉比频率', meaning: '布居数振荡的频率', t: '00:15' }], chapters: [{ t: '00:00', title: '开场' }, { t: '00:09', title: '旋转波近似' }] }))
       // 宿主的翻译口子(引擎的 translate 动作):只回译文,不带标签
@@ -119,6 +122,8 @@ async function main() {
       return sse(`<source>${fixedSel}</source>\n<translation>EN: ${sel}</translation>`)
     },
   })
+
+  if (process.env.MODEL_UI) fs.writeFileSync(path.join(home, 'config.json'), JSON.stringify({ asr: { backend: 'local' }, models: { translate: 'm1' }, providers: [{ providerId: 'probe', baseUrl: stub.url, apiKey: 'test-only', asrModelIds: ['speech'] }] }))
 
   // 裸起 Electron 再用 CDP 接上:playwright 的 _electron.launch 会顶掉 AudioServiceOutOfProcess,假麦克风就没声音了
   // (desktop 的 scripts/lib/voice-fixture.cjs 记过)。主进程那头(隐藏 / 关闭窗口)走 --inspect。
@@ -155,7 +160,7 @@ async function main() {
     await mainWin('setContentSize', 1440, 900)
     await win.waitForTimeout(2000)
     // 合成的那几句是中文,翻成英文;换成真实录音时用 DITING_TARGET 指定(英文课要翻成中文就给 zh)。
-    await win.evaluate((target) => { localStorage.setItem('diting.test', '1'); localStorage.setItem('plugin.diting.target', target) }, process.env.DITING_TARGET || 'en')
+    await win.evaluate((target) => { localStorage.setItem('diting.test', '1'); localStorage.setItem('plugin.diting.workFolder', '谛听'); localStorage.setItem('plugin.diting.target', target) }, process.env.DITING_TARGET || 'en')
     await win.reload(); await win.waitForSelector('#root', { timeout: 30_000 }); await win.waitForTimeout(2500)
     for (const label of ['跳过引导', 'Skip']) { const b = win.locator(`text=${label}`).first(); if (await b.count().catch(() => 0)) { await b.click().catch(() => {}); break } }
     await win.waitForSelector('.dv-groupview', { timeout: 30_000 })
@@ -178,6 +183,9 @@ async function main() {
     ok('右栏默认显示的是对话,不是章节', await T(() => { const a = document.querySelector('.dt-chat'); return !!a && a.offsetParent !== null }))
     await shot('01-start')
 
+    if (process.env.MODEL_UI) {
+      await require('./space-models.cjs').run({ win, T, state, until, shot, ok, enter, inline, cloudAsr, failNextAsr: () => { cloudFailNext = 3 }, vault, home, mainWin })
+    } else {
     await win.locator('[data-field="title"]').fill('PHYS3721 第 2 讲')
     await win.locator('.dt-go').click()
     await until('开始录', (s) => s.phase === 'live')
@@ -194,7 +202,7 @@ async function main() {
         // 打开「翻译时顺带纠正听错的词」:后面的句子回到聊天模型那条(按固定格式回话、原文被改正)
         await T(() => { localStorage.setItem('plugin.diting.fix', 'true') })
         const fx = await until('打开纠正后有句子被改', (s) => s.fixed >= 1, 40_000).then((s) => s, () => null)
-        ok('打开「顺带纠正」后回到聊天模型那条', !!fx && inline.some((b) => b.action === 'custom' && String(b.instruction || '').includes('<translation>')) && fx.trs.filter(Boolean).every((x) => !x.includes('<')), fx ? `改了 ${fx.fixed} 句` : '')
+        ok('打开「顺带纠正」后使用选中的可纠错翻译模型', !!fx && inline.some((b) => b.action === 'custom' && String(b.instruction || '').includes('<translation>')) && fx.trs.filter(Boolean).every((x) => !x.includes('<')), fx ? `改了 ${fx.fixed} 句` : '')
       } else {
         ok('旧宿主没有翻译口子:照旧一次调用里翻译 + 纠正', calls.length > 0 && calls.every((b) => b.action === 'custom') && shown.length > 0 && shown.every((x) => x.startsWith('EN: ') && !x.includes('<')), `${calls.length} 次;第一句:${shown[0] || ''}`)
       }
@@ -314,12 +322,14 @@ async function main() {
       ok('从小窗结束', (await until('结束', (s) => s.phase === 'idle', 90_000).then(() => true, () => false)))
       await mainWin('showInactive'); await sleep(800)
     }
+    }
     ok('页面没有抛错', errors.length === 0, errors.slice(0, 3).join(' | '))
   } catch (e) { failed = e } finally {
     REAL?.stop()
     await browser?.close().catch(() => {}); child.kill('SIGTERM'); await sleep(800); if (child.exitCode == null) child.kill('SIGKILL'); await stub.close?.()
     if (!process.env.KEEP) fs.rmSync(home, { recursive: true, force: true }); else console.log('临时目录', home)
   }
+  fs.writeFileSync(path.join(SHOTS, process.env.MODEL_UI ? 'space-results.json' : process.env.REAL_AI ? 'live-smoke-results.json' : 'smoke-results.json'), JSON.stringify({ results, aborted: failed?.message || null, passed: results.filter(r => r.pass).length }, null, 2))
   if (failed) { console.error('中断:', failed.message); process.exitCode = 1 }
   const bad = results.filter((r) => !r.pass)
   console.log(`\n${results.length - bad.length}/${results.length} 通过${bad.length ? `;没过:${bad.map((r) => r.name).join('、')}` : ''}`)
