@@ -198,7 +198,7 @@ try {
     await E.apply({ c: 'target', rec: 'e', target: 'en' }); await settle()
     assert.deepEqual([seen.length, calls.length, disk('e').segments[0].tr, disk('e').segments[0].text, disk('e').segments[0].raw], [1, 1, 'T', '今天讲拉比频率。', '今天讲拉比贫率。'])
     setPref('fix', false)
-    pass('打开「翻译时顺带纠正听错的词」:回到聊天模型那条,原文被改正、留着改之前的')
+    pass('旧宿主打开纠正:用旧版 complete 路径,原文可改且保留原样')
   }
 
   test('发布物:main.js 就是当前源码打出来的,版本号对得上', async () => 0)

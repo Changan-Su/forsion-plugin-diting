@@ -1,14 +1,15 @@
 {
   "name": "forsion-plugin-diting",
   "private": true,
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "谛听:Forsion 的实时转写与记录插件(边说边出字、逐句翻译、过程中提问、结束后出纪要;构建源,产物 main.js 已提交)",
   "type": "module",
   "scripts": {
     "build": "node build.mjs",
-    "check": "node check.mjs",
+    "check": "node check.mjs && node verify/models.check.mjs",
     "typecheck": "tsc --noEmit",
-    "verify": "npm run typecheck && npm run build && npm run check"
+    "verify": "npm run typecheck && npm run build && npm run check",
+    "check:models": "node verify/models.check.mjs"
   },
   "devDependencies": {
     "esbuild": "^0.25.0",

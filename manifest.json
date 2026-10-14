@@ -2,7 +2,7 @@
   "id": "diting",
   "name": "谛听",
   "nameEn": "Diting",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "apiVersion": 1,
   "minAppVersion": "2.13.2",
   "description": "把听到的变成文字。上课、开会、访谈的时候录下来，边说边出文字，需要的话同时翻译；过程中可以在右边对已经记下的内容随时提问，结束以后自动写纪要、分章节。转写走 Forsion 自己的语音识别（设置 › 语音），转写、笔记、纪要和录音都存在你的笔记库里。切到别的 Space 或把窗口收起来，记录不会停；也可以开成小窗放在一边。",
@@ -13,7 +13,7 @@
     "steps": [
       {
         "title": "语音识别和麦克风",
-        "description": "转写用的是 Forsion 自己的语音识别：在 设置 › 语音 里选好（本机模型不联网、不花额度；也可以用云端）。第一次点「开始记录」时系统会问麦克风权限（macOS：系统设置 › 隐私与安全性 › 麦克风）。"
+        "description": "在 Space 中分别选择转文字模型和翻译模型，或跟随 Forsion 设置。本机模型离线运行，需先在 设置 › 语音 下载；云端模型使用已配置的 Provider。第一次开始记录时系统会询问麦克风权限。"
       },
       {
         "title": "记录一次",
@@ -29,7 +29,7 @@
       "steps": [
         {
           "title": "Speech recognition and microphone",
-          "description": "Transcription uses Forsion's own speech recognition: choose it under Settings › Voice (the on-device model works offline and costs nothing; cloud models are also available). The first time you start a recording, the system asks for microphone access (macOS: System Settings › Privacy & Security › Microphone)."
+          "description": "Choose transcription and translation models in Space, or follow Forsion settings. Download the offline model under Settings › Voice first; cloud models use your configured Providers. The system asks for microphone access when you start your first recording."
         },
         {
           "title": "Record something",

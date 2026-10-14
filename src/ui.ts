@@ -3,8 +3,9 @@
 // 用户的字、模型的字一律走 textContent / append(不拼 innerHTML);只有自己写死的图标走 html。
 
 import { canAi } from './ai'
+import { chooseTarget, closeConfiguration, mountModelControls, prepareDraft, recordingDraft, showGlossary } from './configuration'
 import { canRetry, importFile } from './engine'
-import { duration, getLocale, t, TARGETS, type Key } from './i18n'
+import { duration, getLocale, t, TARGETS, targetLabel, type Key } from './i18n'
 import { changes, clock, FILES, parseClock, type Layout, type Rec, type Segment, type SummaryStyle } from './model'
 import { emit, on, OWNER, prefs, S, setPref, type Prefs } from './state'
 import { loadRec, vaultReady } from './store'
@@ -148,7 +149,7 @@ export async function openRecord(id: string): Promise<void> {
 }
 
 export function newRecord(): void {
-  if (S.live) { S.open = S.live; ctx.notify?.(t('busy'), { level: 'info' }) } else { S.open = null; unloadAudio() }
+  if (S.live) { S.open = S.live; ctx.notify?.(t('busy'), { level: 'info' }) } else { S.open = null; prepareDraft(); unloadAudio() }
   V.menu = false
   ctx.openView('session', { location: 'main' })
   emit()
@@ -160,13 +161,13 @@ export function pickImport(): void {
   if (S.phase !== 'idle') { ctx.notify?.(t('busy'), { level: 'warning' }); return }
   fileInput ??= (() => {
     const el = h('input', { type: 'file', accept: 'audio/*,video/*', hidden: true }) as HTMLInputElement
-    el.addEventListener('change', () => { const f = el.files?.[0]; el.value = ''; if (f) { ctx.openView('session', { location: 'main' }); void importFile(f) } })
+    el.addEventListener('change', () => { const f = el.files?.[0]; el.value = ''; if (f) { ctx.openView('session', { location: 'main' }); void importFile(f, recordingDraft) } })
     document.body.append(el)
     return el
   })()
   fileInput.click()
 }
-export const disposeUi = (): void => { fileInput?.remove(); fileInput = null; unloadAudio(); chat?.handle.dispose(); chat = null }
+export const disposeUi = (): void => { closeConfiguration(); fileInput?.remove(); fileInput = null; unloadAudio(); chat?.handle.dispose(); chat = null }
 
 // ── 零件:转写 ─────────────────────────────────────────────────────────────────────────────────────
 
@@ -194,9 +195,12 @@ function segEl(rec: Rec, s: Segment, o: { sel: boolean; seekable: boolean }): HT
     const tr = h('div', { class: 't' })
     if (s.trState === 'done' && s.tr) tr.textContent = s.tr
     else if (s.trState === 'wait') tr.append(h('span', { class: 'dt-wait' }, t('translating')))
-    else if (s.trState === 'fail') tr.append(h('span', { class: 'dt-wait' }, t('trFailed')), btn('retry', t('retry'), { cls: 'dt-link', text: true, data: { 'data-seg': s.id } }))
+    else if (s.trState === 'fail') { if (s.tr) tr.append(h('span', null, s.tr), h('br')); tr.append(h('span', { class: 'dt-wait' }, t('trFailed')), btn('retry', t('retry'), { cls: 'dt-link', text: true, data: { 'data-seg': s.id } })) }
+    else if (s.trState !== 'skip') tr.textContent = t('noTranslation')
     node.append(tr)
   }
+  const receipt = [s.asrModel && s.asrModel.id !== rec.asrModel ? s.asrModel.name : '', s.trModel && (s.trModel.id !== rec.translationModel || s.trTarget !== rec.target) ? `${s.trModel.name} · ${targetLabel(s.trTarget || rec.trLang || rec.target)}` : ''].filter(Boolean).join(' · ')
+  if (receipt) node.append(h('div', { class: 'dt-model-receipt' }, receipt))
   if (o.sel) {
     const row = h('div', { class: 'dt-acts' })
     if (o.seekable) row.append(btn('seek', t('playFrom'), { icon: 'play', text: true, data: { 'data-t': s.start } }))
@@ -235,7 +239,7 @@ function transcriptPane(compact = false): Pane {
       for (const s of rec.segments) {
         seen.add(s.id)
         const sel = !compact && V.sel === s.id
-        const sig = [s.text, s.tr, s.trState, s.mark, s.low, s.fail, s.raw, s.start, sel, V.playing === s.id, rec.target, seekable, getLocale(), s.fail && canRetry(rec, s.id)].join('\u0001')
+        const sig = [s.text, s.tr, s.trState, s.mark, s.low, s.fail, s.raw, s.start, sel, V.playing === s.id, rec.target, seekable, getLocale(), s.fail && canRetry(rec, s.id), JSON.stringify(s.asrModel), JSON.stringify(s.trModel), s.trTarget, rec.asrModel, rec.translationModel].join('\u0001')
         let node = nodes.get(s.id)
         if (!node || sigs.get(s.id) !== sig) { const next = segEl(rec, s, { sel, seekable }); node?.replaceWith(next); node = next; nodes.set(s.id, node); sigs.set(s.id, sig) }
         if (node.parentElement !== list || node.previousElementSibling !== prev) list.insertBefore(node, prev ? prev.nextSibling : list.firstChild)
@@ -358,11 +362,11 @@ const LAYOUTS: Array<[Layout, Key, Key]> = [['transcript', 'layoutTranscript', '
 const DISPLAYS: Array<[Prefs['display'], Key]> = [['stacked', 'stacked'], ['paired', 'paired'], ['original', 'originalOnly']]
 
 function startForm(): HTMLElement {
-  const p = prefs()
-  const title = h('input', { class: 'dt-in', type: 'text', placeholder: t('titlePlaceholder'), 'data-field': 'title', 'aria-label': t('fieldTitle') })
+  const p = recordingDraft
+  const title = h('input', { class: 'dt-in', type: 'text', placeholder: t('titlePlaceholder'), value: recordingDraft.title, 'data-field': 'title', 'aria-label': t('fieldTitle') })
   const keep = h('input', { type: 'checkbox', class: 'dt-sw', 'data-change': 'keep', checked: p.keep, 'aria-label': t('fieldKeep') })
   return h('div', { class: 'dt-start' },
-    h('h1', null, t('startTitle')), h('p', null, t('startHint')),
+    h('h1', null, t('startTitle')), h('p', null, t('startHint')), h('div', { class: 'dt-model-controls' }),
     h('div', { class: 'dt-row' }, h('label', null, t('fieldTitle')), title),
     h('div', { class: 'dt-row' }, h('label', null, t('fieldTarget')), select('prefTarget', targetOptions(), p.target)),
     h('div', { class: 'dt-row' }, h('label', null, t('fieldKeep')), keep),
@@ -437,6 +441,7 @@ export function mountSession(el: HTMLElement): () => void {
   const root = h('div', { class: 'dt' }); el.append(root)
   let key = ''; let panes: Pane[] = []
   let bar: HTMLElement; let body: HTMLElement; let head: HTMLElement | null = null; let banner: HTMLElement
+  let modelCleanup: (() => void) | null = null
   let dockSig = ''; let dockEl: HTMLElement | null = null; let menuEl: HTMLElement | null = null; let menuSig = ''
 
   const draw = (): void => {
@@ -447,6 +452,7 @@ export function mountSession(el: HTMLElement): () => void {
     root.dataset.layout = p.layout; root.dataset.display = rec?.target ? p.display : 'original'
     const next = [S.vault, rec?.id ?? '', p.layout, tab, getLocale()].join('|')
     if (next !== key) {
+      modelCleanup?.(); modelCleanup = null
       key = next; panes = []; head = null; dockSig = ''; dockEl = null; menuEl = null; menuSig = ''
       bar = h('div', { class: 'dt-bar' }); banner = h('div', { class: 'dt-banner', hidden: true }); body = h('div', { class: 'dt-main' })
       root.replaceChildren(bar, banner, body)
@@ -459,7 +465,7 @@ export function mountSession(el: HTMLElement): () => void {
         bar.append(btn('menu', t('more'), { icon: 'more', cls: 'dt-ibtn' }))
         head = h('div', { class: 'dt-head' },
           h('h1', { class: 'dt-h1', contenteditable: 'plaintext-only', spellcheck: 'false', 'data-field': 'recTitle' }, rec.title),
-          h('div', { class: 'dt-meta' }))
+          h('div', { class: 'dt-meta' }), h('div', { class: 'dt-model-controls' }))
         if (tab === 'split') {
           const a = transcriptPane(); const b = notesPane(); panes = [a, b]
           body.append(h('div', { class: 'dt-chead' }, head), h('div', { class: 'dt-two' }, a.el, b.el))
@@ -469,6 +475,8 @@ export function mountSession(el: HTMLElement): () => void {
         }
       }
     }
+    const modelHost = root.querySelector<HTMLElement>('.dt-model-controls')
+    if (modelHost && !modelCleanup) modelCleanup = mountModelControls(modelHost, rec)
     // 提示条:出错、上次没正常结束
     const note = S.error || (rec && S.healed === rec.id ? t('interrupted') : '') || (!rec ? '' : !canAi() && rec.target ? t('needAi') : '')
     const slot = root.querySelector<HTMLElement>('[data-slot="error"]')
@@ -485,8 +493,10 @@ export function mountSession(el: HTMLElement): () => void {
       else meta.push(h('span', null, duration(rec.duration)))
       meta.push(h('span', null, rec.source === 'file' ? t('sourceFile') : t('srcMic')))
       if (rec.audio) meta.push(h('span', null, t('savedAudio')))
+      const failures = rec.segments.filter(s => s.trState === 'fail' || (s.fail && canRetry(rec, s.id))).length
+      if (failures) meta.push(h('span', { class: 'dt-retry-row' }, t('failedCount', { n: failures }), btn('retryAll', S.retrying === rec.id ? t('retrying') : t('retryAll'), { text: true, cls: 'dt-link', disabled: !!S.retrying })))
       const sig = meta.map((m) => m.textContent).join('|') + (live ? S.phase : '')
-      const box = head.lastElementChild as HTMLElement
+      const box = head.querySelector<HTMLElement>('.dt-meta')!
       if (box.dataset.sig !== sig) { box.dataset.sig = sig; box.replaceChildren(...meta) }
     }
     for (const pane of panes) pane.update(rec)
@@ -505,7 +515,7 @@ export function mountSession(el: HTMLElement): () => void {
   const stopUi = wire(root)
   void vaultReady().then((ok) => { if (S.vault !== ok) { S.vault = ok; emit() } })
   draw()
-  return () => { off(); stopUi(); cancelAnimationFrame(raf); root.remove() }
+  return () => { off(); stopUi(); modelCleanup?.(); cancelAnimationFrame(raf); root.remove() }
 }
 
 // ── 点击和输入(主页面、底部字幕、章节共用)────────────────────────────────────────────────────────────
@@ -529,6 +539,8 @@ function wire(root: HTMLElement): () => void {
       case 'quote': if (rec && seg) engage(rec, { quote: `[${clock(seg.start)}] ${seg.text}` }); return
       case 'revert': if (rec) act({ c: 'revert', rec: rec.id, seg: segId }); return
       case 'term': act({ c: 'term', from: d.from || '', to: d.to || '' }); ctx.notify?.(t('termAdded'), { level: 'success' }); return
+      case 'retryAll': if (rec) act({ c: 'retryAll', rec: rec.id }); return
+      case 'glossary': showGlossary(root); return
       case 'retry': if (rec) act({ c: 'retry', rec: rec.id, seg: segId }); return
       case 'delNote': if (rec) act({ c: 'delNote', rec: rec.id, note: Number(d.note) }); return
       case 'pause': act({ c: 'pause' }); return
@@ -536,8 +548,8 @@ function wire(root: HTMLElement): () => void {
       case 'stop': act({ c: 'stop' }); return
       case 'summarize': if (rec) act({ c: 'summarize', rec: rec.id, style: prefs().style }); return
       case 'start': {
-        const p = prefs()
-        act({ c: 'start', title: root.querySelector<HTMLInputElement>('[data-field="title"]')?.value || '', target: p.target, keep: p.keep })
+        const p = recordingDraft
+        act({ c: 'start', title: root.querySelector<HTMLInputElement>('[data-field="title"]')?.value || '', target: p.target, keep: p.keep, asrModel: p.asrModel, translationModel: p.translationModel })
         return
       }
       case 'import': pickImport(); return
@@ -559,15 +571,16 @@ function wire(root: HTMLElement): () => void {
     const el = e.target as HTMLInputElement | HTMLSelectElement
     const rec = S.open
     switch (el.dataset.change) {
-      case 'target': if (rec) act({ c: 'target', rec: rec.id, target: el.value }); if (el.value) setPref('target', el.value); break
-      case 'prefTarget': setPref('target', el.value); break
-      case 'keep': setPref('keep', (el as HTMLInputElement).checked); break
+      case 'target': if (rec) { const value = el.value; el.value = rec.target; chooseTarget(rec, value, root) } break
+      case 'prefTarget': recordingDraft.target = el.value; break
+      case 'keep': recordingDraft.keep = (el as HTMLInputElement).checked; break
       case 'style': setPref('style', el.value as SummaryStyle); break
       default:
     }
   }
   const input = (e: Event): void => {
     const el = e.target as HTMLInputElement
+    if (el.dataset.field === 'title') recordingDraft.title = el.value
     if (el.dataset.input === 'scrub' && S.open) void seek(S.open, Number(el.value), false)
   }
   const down = (e: Event): void => { if ((e.target as HTMLElement).dataset?.input === 'scrub') V.dragging = true }
@@ -758,14 +771,15 @@ export function mountSettings(el: HTMLElement): () => void {
       row(t('setPartial'), sel('partial', [['auto', t('partialAuto')], ['on', t('on')], ['off', t('off')]]), t('setPartialHint')),
       row(t('setAutoSummary'), sw('autoSummary'), t('setAutoSummaryHint')),
       row(t('setStyle'), sel('style', STYLES.map(([id, key]): [string, string] => [id, t(key)]))),
-      h('div', { class: 'dt-set-h' }, t('setGlossary')), h('p', { class: 'dt-hint' }, t('setGlossaryHint')),
+      h('div', { class: 'dt-set-h' }, t('setGlossary')), btn('glossary', t('glossaryAdd'), { text: true, cls: 'dt-btn' }), h('p', { class: 'dt-hint' }, t('setGlossaryHint')),
       terms.length ? h('div', { class: 'dt-terms' }, ...terms.map(([from, to]) => h('div', null, h('span', null, from), h('span', null, '→'), h('span', null, to), btn('', t('del'), { icon: 'x', cls: 'dt-x', data: { 'data-term': from } })))) : h('p', { class: 'dt-empty' }, t('glossaryEmpty')),
     )
   }
   root.addEventListener('click', (e) => {
     const card = (e.target as HTMLElement).closest<HTMLElement>('[data-layout]'); const term = (e.target as HTMLElement).closest<HTMLElement>('[data-term]')
     if (card) setPref('layout', card.dataset.layout as Layout)
-    if (term) { const next = { ...prefs().terms }; delete next[term.dataset.term || '']; setPref('terms', next) }
+    if (term) act({ c: 'termRemove', from: term.dataset.term || '' })
+    if ((e.target as HTMLElement).closest('[data-act=glossary]')) showGlossary(root)
   })
   root.addEventListener('change', (e) => {
     const c = e.target as HTMLInputElement; const key = c.dataset.pref as keyof Prefs | undefined

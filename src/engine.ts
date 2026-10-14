@@ -5,9 +5,10 @@
 //           └→ MediaRecorder(保留录音时) → 录音.webm
 // 时间轴用「喂给 Slicer 的采样数」算,不看墙上的钟:暂停时不走,和录音文件里的时间对得上。
 
-import { cancelWaiting, onChanged, summarize, translate, translateAll } from './ai'
+import { cancelSegment, cancelWaiting, onChanged, summarize, translate } from './ai'
+import { captureModel, resolveModel } from './models'
 import { t } from './i18n'
-import { applyTerms, FILES, folderName, isJunk, newRec, type Rec, type Segment, type SummaryStyle } from './model'
+import { applyTerms, FILES, folderName, isJunk, newRec, type Rec, type Segment, type SummaryStyle, type ModelReceipt, type ChangeScope } from './model'
 import { emit, prefs, S, setPref, sleep } from './state'
 import { drop, init, loadRec, queued, remember, removeRow, root, saveRec, vaultReady } from './store'
 import { base64, Slicer, wavBytes, type Utterance } from './vad'
@@ -22,7 +23,7 @@ let media: MediaRecorder | null = null
 let slicer: Slicer | null = null
 let chunks: Blob[] = []
 /** 每句带着它属于哪条记录:识别回来得晚(上一条已经收尾、下一条已经开始)时不能落错地方。 */
-let queue: Array<{ u: Utterance; rec: Rec }> = []
+let queue: Array<{ u: Utterance; rec: Rec; choice: ReturnType<typeof captureModel> }> = []
 let pumping: Promise<void> | null = null
 let seq = 0
 let rmsAvg = 0
@@ -47,18 +48,21 @@ const msg = (e: unknown): string => (e instanceof Error ? e.message : String(e))
 
 const TIMEOUT = 'speech recognition timed out'
 
-async function recognize(u: Utterance): Promise<string> {
+async function recognize(u: Utterance, choice = captureModel('asr', S.live?.asrModel)): Promise<string> {
+  const captured = await choice
+  if (captured.error || !captured.model) throw captured.error || new Error(t('modelUnavailable'))
+  const model = captured.model
   const fn = window.tangu?.transcribeAudio
   if (!fn) throw new Error('speech recognition is not available in this window')
   // 识别一直不回来(云端卡住)时不能把后面的句子全堵死。
   // ponytail: 这是兜底用的定时器,不推采集和转写;窗口隐藏时它会被降频,45 秒可能拖到一两分钟才到,只是晚一点放行。
-  const r = await Promise.race([fn({ audioBase64: base64(wavBytes(u.pcm, RATE)), mime: 'audio/wav' }), sleep(45_000).then(() => { throw new Error(TIMEOUT) })])
+  const r = await Promise.race([fn({ audioBase64: base64(wavBytes(u.pcm, RATE)), mime: 'audio/wav', ...(ctx.tangu?.modelCatalog ? { backend: model.backend, ...(model.id && model.id !== 'local' ? { modelId: model.id } : {}) } : {}) }), sleep(45_000).then(() => { throw new Error(TIMEOUT) })])
   return (typeof r === 'string' ? r : r?.text || '').trim()
 }
 
 function enqueue(u: Utterance, rec: Rec | null = S.live): void {
   if (!rec) return
-  queue.push({ u, rec })
+  queue.push({ u, rec, choice: captureModel('asr', rec.asrModel) })
   pumping ??= pump().finally(() => { pumping = null })
 }
 
@@ -70,24 +74,24 @@ async function pump(): Promise<void> {
     let text = ''; let err: unknown = null
     // 窗口隐藏时定时器会被降频(几百毫秒能等成一分钟),所以隐藏时连着试,不等。
     for (let i = 0; i < 3; i++) {
-      try { text = await recognize(u); err = null; break } catch (e) { err = e; if (msg(e) === TIMEOUT) break; if (i < 2 && !document.hidden) await sleep(700 * (i + 1)) }
+      try { text = await recognize(u, job.choice); err = null; break } catch (e) { err = e; if (msg(e) === TIMEOUT) break; if (i < 2 && !document.hidden) await sleep(700 * (i + 1)) }
     }
     // 收尾等不及时队列会被清掉、这句已经记成「没转写成」;迟到的结果直接不要,更不能落进后来开始的那条记录里。
     if (queue[0] !== job) continue
     queue.shift()
     if (S.live !== rec) continue
-    if (err) { S.error = t('noAsr', { e: msg(err) }); addSegment(rec, u, '') } else if (!isJunk(text)) { S.error = ''; addSegment(rec, u, text) }
+    if (err) { S.error = t('noAsr', { e: msg(err) }); addSegment(rec, u, '') } else if (!isJunk(text)) { S.error = ''; addSegment(rec, u, text, ctx.tangu?.modelCatalog ? (await job.choice).model || undefined : undefined) }
     S.partial = ''
     touch()
   }
 }
 
-function addSegment(rec: Rec, u: Utterance, raw: string): void {
+function addSegment(rec: Rec, u: Utterance, raw: string, asrModel?: ModelReceipt): void {
   const text = applyTerms(raw, prefs().terms)
   // 比平时小很多的声音多半是离麦克风远的人(问问题的学生、会议室另一头),识别结果标成「没听清」。
   const low = !!text && rmsAvg > 0 && u.rms < rmsAvg * 0.25
   if (text && !low) rmsAvg = rmsAvg ? rmsAvg * 0.8 + u.rms * 0.2 : u.rms
-  const seg: Segment = { id: ++seq, start: Math.round(u.start * 10) / 10, end: Math.round(u.end * 10) / 10, text }
+  const seg: Segment = { ...(asrModel ? { asrModel } : {}), id: ++seq, start: Math.round(u.start * 10) / 10, end: Math.round(u.end * 10) / 10, text }
   if (low) seg.low = true
   if (!text) { seg.fail = true; failed.set(failKey(rec, seg.id), u); if (failed.size > 20) failed.delete(failed.keys().next().value!) }
   if (pendingMark != null && text) {
@@ -131,7 +135,8 @@ function partial(): void {
   const cur = slicer.current()
   if (!cur) return
   lastPartial = slicer.seconds; partialBusy = true
-  recognize(cur).then((text) => { if (slicer?.speaking && !queue.length) S.partial = isJunk(text) ? '' : applyTerms(text, prefs().terms) }).catch(() => undefined).finally(() => { partialBusy = false })
+  const partialRec = S.live; const selected = partialRec?.asrModel
+  recognize(cur, captureModel('asr', selected)).then((text) => { if (S.live === partialRec && S.live?.asrModel === selected && slicer?.speaking && !queue.length) S.partial = isJunk(text) ? '' : applyTerms(text, prefs().terms) }).catch(() => undefined).finally(() => { partialBusy = false })
 }
 
 function resample(input: Float32Array, from: number): Float32Array {
@@ -140,7 +145,7 @@ function resample(input: Float32Array, from: number): Float32Array {
   return out
 }
 
-async function create(o: { title: string; target: string; source: Rec['source'] }): Promise<Rec> {
+async function create(o: { title: string; target: string; source: Rec['source']; asrModel?: string; translationModel?: string }): Promise<Rec> {
   if (!(await vaultReady())) throw new Error(t('noVault'))
   await init()
   const now = new Date()
@@ -148,6 +153,7 @@ async function create(o: { title: string; target: string; source: Rec['source'] 
   // 同一分钟里同名的往后编号,直到列表里和盘上都没有这个文件夹:绝不写进一条已有的记录里。
   for (let n = 2; S.index.some((r) => r.folder === folder) || (await ctx.app.readFile(`${folder}/${FILES.record}`).catch(() => null)); n++) folder = `${base} ${n}`
   const rec = newRec({ id: `${now.getTime().toString(36)}${Math.random().toString(36).slice(2, 6)}`, folder, title: o.title.trim() || t('untitled'), now, source: o.source, target: o.target })
+  rec.asrModel = o.asrModel ?? prefs().asrModel; rec.translationModel = o.translationModel ?? prefs().translationModel
   seq = 0; rmsAvg = 0; pendingMark = null; queue = []; chunks = []
   remember(rec)
   S.live = rec; S.open = rec; S.seconds = 0; S.partial = ''; S.error = ''; S.progress = 0
@@ -155,7 +161,7 @@ async function create(o: { title: string; target: string; source: Rec['source'] 
   return rec
 }
 
-export async function start(o: { title?: string; target?: string; keep?: boolean } = {}): Promise<void> {
+export async function start(o: { title?: string; target?: string; keep?: boolean; asrModel?: string; translationModel?: string } = {}): Promise<void> {
   if (S.phase !== 'idle') { ctx.notify?.(t('busy'), { level: 'warning' }); return }
   const p = prefs(); const my = epoch
   const alive = (): void => { if (my !== epoch) throw new Error('disposed') }
@@ -166,8 +172,8 @@ export async function start(o: { title?: string; target?: string; keep?: boolean
     mic = await navigator.mediaDevices.getUserMedia({ audio: { channelCount: 1, echoCancellation: false, noiseSuppression: true, autoGainControl: true } })
     alive()
     // 要等的事(问宿主用哪种识别、建文件夹)都放在开录之前:开录以后一步都不等,录音文件和时间轴才是同时起步的。
-    const backend = (await window.tangu?.getConfig?.().catch(() => null))?.asrBackend
-    const rec = await create({ title: o.title || '', target: o.target ?? p.target, source: 'mic' })
+    const backend = (await resolveModel('asr', o.asrModel ?? p.asrModel)).backend || (await window.tangu?.getConfig?.().catch(() => null))?.asrBackend
+    const rec = await create({ title: o.title || '', target: o.target ?? p.target, source: 'mic', asrModel: o.asrModel, translationModel: o.translationModel })
     alive()
     stream = mic
     ac = new AudioContext({ sampleRate: RATE })
@@ -292,7 +298,7 @@ async function finish(rec: Rec, duration: number): Promise<void> {
 }
 
 /** 导入一个音频 / 视频文件:解码成 16 kHz 单声道,走和麦克风同一条路(切句 → 识别 → 翻译)。全程不出声。 */
-export async function importFile(file: File): Promise<void> {
+export async function importFile(file: File, options: { asrModel?: string; translationModel?: string; target?: string; keep?: boolean } = {}): Promise<void> {
   if (S.phase !== 'idle') { ctx.notify?.(t('busy'), { level: 'warning' }); return }
   S.phase = 'starting'; S.error = ''; emit()
   let rec: Rec | null = null
@@ -304,8 +310,9 @@ export async function importFile(file: File): Promise<void> {
     if (buf.duration > IMPORT_MAX_HOURS * 3600) throw new Error(t('importTooLong', { h: IMPORT_MAX_HOURS }))
     const pcm = new Float32Array(buf.length)
     for (let c = 0; c < buf.numberOfChannels; c++) { const ch = buf.getChannelData(c); for (let i = 0; i < ch.length; i++) pcm[i] += ch[i] / buf.numberOfChannels }
-    const p = prefs()
-    rec = await create({ title: file.name.replace(/\.[^.]+$/, ''), target: p.target, source: 'file' })
+    const p = { ...prefs(), ...options }
+    await resolveModel('asr', p.asrModel)
+    rec = await create({ title: file.name.replace(/\.[^.]+$/, ''), target: p.target, source: 'file', asrModel: p.asrModel, translationModel: p.translationModel })
     if (p.keep && ctx.app.writeBytes) {
       const ext = (/\.([a-z0-9]{2,5})$/i.exec(file.name)?.[1] || 'audio').toLowerCase()
       rec.audio = `录音.${ext}`
@@ -333,7 +340,7 @@ export async function importFile(file: File): Promise<void> {
 // ── 对一条记录的修改(进行中的、看着的旧记录都走这里;别的窗口发来的操作也落到这里)──────────────────────────
 
 export type Cmd =
-  | { c: 'start'; title?: string; target?: string; keep?: boolean }
+  | { c: 'start'; title?: string; target?: string; keep?: boolean; asrModel?: string; translationModel?: string }
   | { c: 'pause' } | { c: 'resume' } | { c: 'stop' }
   | { c: 'mark'; rec?: string; seg?: number }
   | { c: 'note'; rec: string; text: string; t: number }
@@ -342,11 +349,15 @@ export type Cmd =
   | { c: 'revert'; rec: string; seg: number }
   | { c: 'term'; from: string; to: string }
   | { c: 'retry'; rec: string; seg: number }
-  | { c: 'target'; rec: string; target: string }
+  | { c: 'retryAll'; rec: string }
+  | { c: 'termRemove'; from: string }
+  | { c: 'model'; rec: string; kind: 'asr' | 'translation'; value: string; scope?: ChangeScope }
+  | { c: 'target'; rec: string; target: string; scope?: ChangeScope }
   | { c: 'summarize'; rec: string; style: SummaryStyle }
   | { c: 'delete'; rec: string }
   | { c: 'chatOn'; rec: string }
 
+const modelChanges = new Map<string, number>()
 async function find(id: string): Promise<Rec | null> {
   if (S.live?.id === id) return S.live
   if (S.open?.id === id) return S.open
@@ -369,12 +380,14 @@ export async function apply(cmd: Cmd): Promise<void> {
       if (from && to && from.toLowerCase() !== to.toLowerCase()) setPref('terms', { ...prefs().terms, [from]: to })
       return
     }
+    case 'termRemove': { const terms = { ...prefs().terms }; delete terms[cmd.from]; setPref('terms', terms); return }
     case 'delete': {
       if (S.live?.id === cmd.rec) return
       const row = S.index.find((r) => r.id === cmd.rec)
       if (!row) return
       // 文件夹里全是这次记录自己的东西(转写、笔记、纪要、录音),整个进回收站。
       // 先立碑(还在路上的翻译 / 纪要回来不许再存),再排在已有的写盘后面进回收站。
+      const removing = await find(row.id); if (removing) cancelWaiting(removing)
       drop(row)
       if (ctx.app.trash) await queued(() => ctx.app.trash!(row.folder)).catch((e) => console.warn('[diting] trash', e))
       await removeRow(row.id)
@@ -398,25 +411,38 @@ export async function apply(cmd: Cmd): Promise<void> {
     case 'note': { const text = cmd.text.trim(); if (text) rec.notes.push({ id: rec.notes.reduce((m, n) => Math.max(m, n.id), 0) + 1, t: Math.max(0, Math.round(cmd.t)), text }); break }
     case 'delNote': rec.notes = rec.notes.filter((n) => n.id !== cmd.note); break
     case 'rename': { const title = cmd.title.trim(); if (title) rec.title = title; break }
-    case 'revert': { const s = rec.segments.find((x) => x.id === cmd.seg); if (s?.raw) { s.text = s.raw; s.raw = undefined } break }
+    case 'revert': { const s = rec.segments.find((x) => x.id === cmd.seg); if (s?.raw) { cancelSegment(rec, s); s.text = s.raw; s.raw = undefined } break }
     case 'retry': {
       const s = rec.segments.find((x) => x.id === cmd.seg)
       if (!s) break
       const u = s.fail ? failed.get(failKey(rec, s.id)) : null
       if (u) {
-        try { const text = applyTerms(await recognize(u), prefs().terms); if (!isJunk(text)) { s.text = text; s.fail = undefined; failed.delete(failKey(rec, s.id)); S.error = ''; translate(rec, s) } } catch (e) { S.error = t('noAsr', { e: msg(e) }) }
+        const choice = captureModel('asr', rec.asrModel)
+        try { const text = applyTerms(await recognize(u, choice), prefs().terms); if (!isJunk(text)) { s.text = text; s.asrModel = ctx.tangu?.modelCatalog ? (await choice).model || undefined : undefined; s.fail = undefined; failed.delete(failKey(rec, s.id)); S.error = ''; translate(rec, s) } } catch (e) { S.error = t('noAsr', { e: msg(e) }) }
       } else if (s.text) { s.trState = undefined; translate(rec, s) }
+      break
+    }
+    case 'retryAll': {
+      if (S.retrying) return
+      S.retrying = rec.id; emit()
+      try { for (const seg of rec.segments.filter(s => s.trState === 'fail' || (s.fail && canRetry(rec, s.id)))) await apply({ c: 'retry', rec: rec.id, seg: seg.id }) }
+      finally { S.retrying = ''; emit() }
+      break
+    }
+    case 'model': {
+      const changeKey = `${rec.id}:${cmd.kind}`; const revision = (modelChanges.get(changeKey) || 0) + 1; modelChanges.set(changeKey, revision)
+      const choice = await resolveModel(cmd.kind, cmd.value)
+      if (modelChanges.get(changeKey) !== revision) return
+      if (cmd.kind === 'asr') { rec.asrModel = cmd.value; if (rec === S.live) { partialOn = prefs().partial === 'on' || (prefs().partial === 'auto' && choice.backend === 'local'); S.partial = '' } }
+      else { rec.translationModel = cmd.value; retranslate(rec, cmd.scope || 'future') }
       break
     }
     case 'target': {
       if (rec.target === cmd.target) return
-      cancelWaiting(rec)
-      // 已有的译文是另一种语言的:全部重译。只是关掉翻译的话留着,再开回同一种语言不用重来。
-      // ponytail: 一句一次调用,长记录换语言要调几百次;要省就做成几句并一次。
-      const had = rec.trLang || rec.target
-      if (cmd.target && had && had !== cmd.target) for (const s of rec.segments) { s.tr = undefined; s.trState = undefined }
+      for (const seg of rec.segments) if (seg.tr && !seg.trTarget) seg.trTarget = rec.trLang || rec.target
       rec.target = cmd.target
-      if (cmd.target) { rec.trLang = cmd.target; for (const s of rec.segments) if (s.trState !== 'done') s.trState = undefined; translateAll(rec) }
+      if (!cmd.target) cancelWaiting(rec)
+      else { rec.trLang = cmd.target; retranslate(rec, cmd.scope || 'all') }
       break
     }
     case 'summarize': void summarize(rec, cmd.style); return
@@ -424,6 +450,12 @@ export async function apply(cmd: Cmd): Promise<void> {
     default: return
   }
   commit(rec)
+}
+
+function retranslate(rec: Rec, scope: ChangeScope): void {
+  if (!rec.target || scope === 'future') return
+  if (scope === 'all') cancelWaiting(rec)
+  for (const seg of rec.segments) if (seg.text && !seg.fail && (scope === 'all' || seg.trState === 'fail')) translate(rec, seg)
 }
 
 /** 这一段还能不能重试(声音还在内存里)。 */

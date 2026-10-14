@@ -58,7 +58,14 @@ export function loadRec(folder: string): Promise<Rec | null> {
 async function readRec(folder: string): Promise<Rec | null> {
   const raw = await ctx.app.readFile(`${folder}/${FILES.record}`)
   if (!raw) return null
-  try { const rec = reviveRec(JSON.parse(raw), folder); if (rec?.notes.length) hadNotes.add(folder); return rec } catch { return null }
+  try {
+    const rec = reviveRec(JSON.parse(raw), folder)
+    // The owner only reads uncached records: no job can still own a persisted waiting state after restart.
+    // Secondary windows keep waiting states because the main window may still be processing them.
+    if (OWNER && rec) for (const seg of rec.segments) if (seg.trState === 'wait') seg.trState = 'fail'
+    if (rec?.notes.length) hadNotes.add(folder)
+    return rec
+  } catch { return null }
 }
 
 async function writeIndex(rows: IndexRow[]): Promise<void> {

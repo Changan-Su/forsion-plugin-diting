@@ -12,7 +12,7 @@ const CMD = 'diting.cmd'
 const TAIL = 8
 const NOTES = 200
 
-interface Snap { phase: Phase; seconds: number; partial: string; error: string; progress: number; saved: number; summarizing: string; summaryError: string; rec: Rec | null }
+interface Snap { phase: Phase; seconds: number; partial: string; error: string; progress: number; saved: number; summarizing: string; summaryError: string; retrying?: string; rec: Rec | null }
 
 let last = ''
 
@@ -21,7 +21,7 @@ export function publish(): void {
   if (!OWNER) return
   const r = S.live
   const snap: Snap = {
-    phase: S.phase, seconds: Math.floor(S.seconds), partial: S.partial, error: S.error, progress: Math.round(S.progress * 100) / 100, saved: S.saved, summarizing: S.summarizing, summaryError: S.summaryError,
+    phase: S.phase, seconds: Math.floor(S.seconds), partial: S.partial, error: S.error, progress: Math.round(S.progress * 100) / 100, saved: S.saved, summarizing: S.summarizing, summaryError: S.summaryError, retrying: S.retrying,
     // 笔记整份带上(短、少,别的窗口以它为准);句子只带最近几句,全文让别的窗口自己从库里读。
     rec: r ? { ...r, segments: r.segments.slice(-TAIL), notes: r.notes.slice(-NOTES), chapters: [], summary: undefined } : null,
   }
@@ -42,7 +42,7 @@ function take(text: string | null): void {
   try { snap = text ? JSON.parse(text) : null } catch { /* 坏了当没有 */ }
   if (!snap) return
   const viewingLive = !!S.open && !!snap.rec && S.open.id === snap.rec.id
-  S.phase = snap.phase; S.seconds = snap.seconds; S.partial = snap.partial; S.error = snap.error; S.progress = snap.progress; S.summarizing = snap.summarizing; S.summaryError = snap.summaryError
+  S.phase = snap.phase; S.seconds = snap.seconds; S.partial = snap.partial; S.error = snap.error; S.progress = snap.progress; S.summarizing = snap.summarizing; S.summaryError = snap.summaryError; S.retrying = snap.retrying || ''
   if (snap.rec) {
     const tail = snap.rec.segments; const ids = new Set(tail.map((s) => s.id))
     const base = full && full.id === snap.rec.id ? full : null

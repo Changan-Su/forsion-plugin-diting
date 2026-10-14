@@ -212,3 +212,38 @@
 .dt-card .pic.split { grid-template-columns: 1fr 1fr; } .dt-card .pic.split i:nth-child(3) { display: none; }
 .dt-terms div { display: grid; grid-template-columns: minmax(0, 1fr) 20px minmax(0, 1fr) 24px; gap: 8px; align-items: center; min-height: 34px; border-bottom: 1px solid var(--border); }
 .dt-terms span:nth-child(2) { color: var(--text-faint); }
+
+/* Model choices are host-native mounts; only their business layout belongs to this plugin. */
+.dt-model-controls { margin: 14px 0 10px; }
+.dt-model-row { display: grid; grid-template-columns: minmax(0,1fr) minmax(0,1fr); gap: 12px; padding: 10px 12px; border-radius: var(--radius-md); background: var(--overlay-subtle); }
+.dt-model-field { display: flex; flex-direction: column; gap: 5px; min-width: 0; }
+.dt-model-label { font-size: var(--ui-font-caption); color: var(--text-muted); }
+.dt-model-picker { display: block; min-width: 0; }
+.dt-model-picker .plugin-model-picker { display: flex; flex-direction: column; min-width: 0; }
+.dt-model-picker .model-pill-wrap { width: 100%; }
+.dt-model-picker .composer-chip { max-width: 100%; }
+.dt-model-foot { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; padding: 6px 2px 0; font-size: var(--ui-font-caption); color: var(--text-faint); }
+.dt-model-foot > span { flex: 1; min-width: 120px; }
+.dt-model-correction-hint { display: block; margin-top: 5px; font-size: var(--ui-font-caption); color: var(--text-muted); }
+.dt-model-correction-hint:empty { display: none; }
+.dt-model-receipt { grid-column: 2; font-size: var(--ui-font-caption); color: var(--text-faint); overflow-wrap: anywhere; }
+.dt-retry-row { display: inline-flex; gap: 8px; align-items: center; color: var(--warning); }
+.dt-config-shade { position: fixed; inset: 0; z-index: 110; background: var(--overlay-scrim); display: flex; align-items: center; justify-content: center; padding: 16px; }
+.dt-config-panel { width: min(440px,100%); max-height: calc(100dvh - 32px); overflow-y: auto; background: var(--bg-card); color: var(--text); padding: 18px; border: 1px solid var(--border); border-radius: var(--radius-md); box-shadow: var(--card-shadow); font: var(--ui-font-body)/var(--ui-line-body) var(--font-ui); }
+.dt-config-panel * { box-sizing: border-box; }
+.dt-config-head { display: flex; gap: 12px; align-items: center; justify-content: space-between; margin-bottom: 12px; }
+.dt-config-head strong { font-size: var(--ui-font-heading); font-weight: 500; }
+.dt-config-hint { font-size: var(--ui-font-meta); line-height: var(--ui-line-meta); color: var(--text-muted); margin: 8px 0 12px; overflow-wrap: anywhere; }
+.dt-config-choice { display: flex; gap: 10px; align-items: flex-start; padding: 10px 0; }
+.dt-config-choice > input { margin: 3px 0; }
+.dt-config-choice > span { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.dt-config-choice small { font-size: var(--ui-font-meta); line-height: var(--ui-line-meta); color: var(--text-muted); }
+.dt-config-button { background: var(--overlay-light); border: 1px solid var(--border); color: var(--text); font: inherit; padding: 5px 10px; border-radius: var(--radius-sm); min-height: var(--ui-control-height); cursor: pointer; }
+.dt-config-button.primary { background: var(--action-fill); color: var(--on-action); border-color: transparent; }
+.dt-config-link { font: inherit; background: transparent; border: 0; color: inherit; padding: 2px; cursor: pointer; }
+.dt-config-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 14px; }
+.dt-config-term { display: flex; align-items: center; gap: 12px; justify-content: space-between; padding: 9px 0; border-bottom: 1px solid var(--border); }
+.dt-config-term > span { min-width: 0; overflow-wrap: anywhere; }
+.dt-config-field { display: flex; flex-direction: column; gap: 5px; margin-top: 12px; }
+.dt-config-field input { color: var(--text); background: var(--bg); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 6px 8px; font: inherit; width: 100%; }
+@container (max-width: 370px) { .dt-model-row { grid-template-columns: minmax(0,1fr); } }

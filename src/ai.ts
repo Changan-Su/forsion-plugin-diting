@@ -1,9 +1,10 @@
 // 翻译和纪要,都是宿主的一次性调用(不带工具、不进会话)。
-// 翻译:宿主有 ctx.tangu.translate 就走它 —— 只翻译,模型是用户在「设置 → 模型 → 翻译」里选的那个(可以是便宜的小模型
-// 或专门的翻译模型)。「顺带按上下文改听错的词」要聊天模型按下面那套格式回话,是设置里的一个开关(默认关);
+// 翻译:逐句捕获本次记录选的模型;空值跟随宿主翻译槽。专用翻译模型只翻译。
+// 「顺带按上下文改听错的词」在选中支持指令的模型时使用下面的格式(默认关);
 // 旧宿主没有 translate,照旧用 ctx.tangu.complete 一并做。纪要一直走 complete。
 // 提示词是给模型读的,一律英文。
 
+import { captureModel } from './models'
 import { getLocale, t, targetEnglish } from './i18n'
 import { acceptFix, alreadyIn, chunkSegments, clock, looseJson, mergeSummaries, plainLines, readSummary, summaryMd, tagOf, type Rec, type Segment, type SummaryStyle } from './model'
 import { emit, prefs, S } from './state'
@@ -41,60 +42,78 @@ let changed: (rec: Rec) => void = () => undefined
 /** 翻译 / 纪要改了一条记录以后怎么存,由引擎说了算(进行中的攒着存,结束了的立刻存)。 */
 export const onChanged = (fn: (rec: Rec) => void): void => { changed = fn }
 
-const waiting: Array<{ rec: Rec; seg: Segment }> = []
+interface Job { rec: Rec; seg: Segment; target: string; source: string; fix: boolean; choice: ReturnType<typeof captureModel>; abort: AbortController }
+const waiting: Job[] = []
+const jobs = new Map<string, Job>()
 let active = 0
+const keyOf = (rec: Rec, seg: Segment): string => `${rec.id}:${seg.id}`
+
+export function cancelSegment(rec: Rec, seg: Segment): void {
+  const key = keyOf(rec, seg); const job = jobs.get(key)
+  if (!job) return
+  jobs.delete(key); job.abort.abort()
+  const i = waiting.indexOf(job); if (i >= 0) waiting.splice(i, 1)
+  if (seg.trState === 'wait') seg.trState = seg.tr ? 'done' : undefined
+}
 
 export function translate(rec: Rec, seg: Segment): void {
   if (!rec.target || !seg.text || !canAi()) return
-  if (alreadyIn(seg.text, rec.target)) { seg.trState = 'skip'; return }
-  seg.trState = 'wait'
-  waiting.push({ rec, seg })
+  cancelSegment(rec, seg)
+  if (alreadyIn(seg.text, rec.target)) { seg.tr = undefined; seg.trModel = undefined; seg.trState = 'skip'; seg.trTarget = rec.target; return }
+  const job: Job = { rec, seg, target: rec.target, source: seg.text, fix: prefs().fix, choice: captureModel('translation', rec.translationModel), abort: new AbortController() }
+  jobs.set(keyOf(rec, seg), job); seg.trState = 'wait'; waiting.push(job)
   pump()
 }
 
-/** 把一条记录里还没翻译的句子都排上(换了目标语言、或者打开旧记录以后开翻译)。 */
 export function translateAll(rec: Rec): void {
-  for (const seg of rec.segments) if (seg.trState !== 'done' && seg.trState !== 'wait') translate(rec, seg)
+  for (const seg of rec.segments) if (!seg.fail && seg.trState !== 'done' && seg.trState !== 'wait') translate(rec, seg)
 }
 
-// ponytail: 一句一次调用、同时最多两句。导入长文件时会慢、也费额度;要省就把排队的句子几句并成一次。
 function pump(): void {
   while (active < 2 && waiting.length) {
     const job = waiting.shift()!
     active++
-    void one(job.rec, job.seg).finally(() => { active--; pump() })
+    void one(job).finally(() => { active--; pump() })
   }
 }
 
-/** 换了目标语言:还排着的不要了(调用方会重新排)。 */
-export function cancelWaiting(rec: Rec): void { for (let i = waiting.length; i--;) if (waiting[i].rec === rec) waiting.splice(i, 1) }
+/** Explicit retranslation, translation Off, delete or unload invalidates both queued and running results. */
+export function cancelWaiting(rec: Rec): void {
+  for (const job of [...jobs.values()]) if (job.rec === rec) cancelSegment(rec, job.seg)
+}
 
-async function one(rec: Rec, seg: Segment): Promise<void> {
-  const target = rec.target
-  if (!target) { seg.trState = undefined; return }
+async function one(job: Job): Promise<void> {
+  const { rec, seg, target, source } = job
+  const key = keyOf(rec, seg)
+  const current = (): boolean => jobs.get(key) === job && !job.abort.signal.aborted && seg.text === source
   const i = rec.segments.indexOf(seg)
-  // 前面几句连同已经给出的译文一起带上:同一个术语前后要译成一样的。
-  const before = rec.segments.slice(Math.max(0, i - 6), Math.max(0, i)).filter((s) => s.text).map((s) => (s.tr ? `${s.text}\n→ ${s.tr}` : s.text)).join('\n').slice(-3000)
+  const before = rec.segments.slice(Math.max(0, i - 6), Math.max(0, i)).filter(s => s.text).map(s => s.tr && (s.trTarget || rec.trLang) === target ? `${s.text}\n→ ${s.tr}` : s.text).join('\n').slice(-3000)
   try {
-    const seam = prefs().fix ? undefined : ctx.tangu?.translate
+    const captured = await job.choice
+    if (!current()) return
+    if (captured.error || !captured.model) throw captured.error || new Error('model unavailable')
+    const model = captured.model
+    const seam = job.fix && model.supportsCorrection !== false ? undefined : ctx.tangu?.translate
+    const request = { before, signal: job.abort.signal, ...(model.id ? { modelId: model.id } : {}) }
     const r = seam
-      ? await seam({ text: seg.text, language: targetEnglish(target), before })
-      : await ctx.tangu!.complete!({ prompt: TRANSLATE(targetEnglish(target)), selection: seg.text, before })
-    // 等的时候目标语言换了:这份是旧语言的,不要。
-    if (rec.target !== target) return
+      ? await seam({ text: source, language: targetEnglish(target), ...request })
+      : await ctx.tangu!.complete!({ prompt: TRANSLATE(targetEnglish(target)), selection: source, ...request })
+    if (!current()) return
     const tr = seam ? r.text.trim() : tagOf(r.text, 'translation')
     if (!tr) throw new Error('no translation in reply')
     if (!seam) {
       const fixed = tagOf(r.text, 'source')
-      if (!seg.raw && acceptFix(seg.text, fixed)) { seg.raw = seg.text; seg.text = fixed }
+      if (!seg.raw && acceptFix(source, fixed)) { seg.raw = source; seg.text = fixed }
     }
-    seg.tr = tr; seg.trState = 'done'
+    seg.tr = tr; seg.trState = 'done'; seg.trTarget = target
+    seg.trModel = r.model ? { id: r.model.id, name: r.model.name === r.model.id ? model.name : r.model.name } : { id: model.id, name: model.name }
   } catch (e) {
+    if (!current()) return
     console.warn('[diting] translate', e)
-    if (rec.target !== target) return
     seg.trState = 'fail'
+  } finally {
+    if (jobs.get(key) === job) { jobs.delete(key); changed(rec) }
   }
-  changed(rec)
 }
 
 const SUMMARY_LANG: Record<string, string> = { zh: 'Simplified Chinese', en: 'English' }
