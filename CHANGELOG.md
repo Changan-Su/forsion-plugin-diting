@@ -1,18 +1,20 @@
 # 更新记录
 
-## 0.3.0 — 2026-10-14（源码，未发布 / Source, unreleased）
+## 0.3.0 — 2026-10-19
 
 - Space 内分别选择转文字与翻译模型，可跟随宿主设置或设为 Space 默认；全局设置保持原值
 - 翻译模型与语言切换支持仅后续句子、后续和失败项、重译已有内容；迟到结果不会覆盖新译文
 - 批量重试失败项；可恢复的转写失败与翻译失败一起处理，完成的句子保持原样
 - Space 直接添加、删除术语；每句保留实际模型与译文语言，旧记录兼容读取
 - 专用翻译模型不支持纠错时明确提示，不会改用聊天模型
+- 在 Space 里换模型要比 2.13.4 更新的桌面版本；2.13.4 及更早的版本上两处显示「跟随语音设置 / 跟随翻译设置」，照旧在设置里换，其余改动都能用
 
 - Choose transcription and translation models in Space; follow host settings or save Space defaults without changing global slots.
 - Apply translation changes to future sentences, future and failed items, or all existing content. Late results cannot overwrite replacements.
 - Retry failed transcription and translation items in one action; completed sentences retain their content.
 - Add and remove glossary terms in Space. Sentence model receipts and translation languages survive reload.
 - Dedicated translation models remain selected when correction is enabled; their limitation is shown.
+- Choosing models in Space needs a desktop newer than 2.13.4. On 2.13.4 and earlier both fields follow the global settings; everything else works.
 
 ## 0.2.0 — 2026-10-13
 
