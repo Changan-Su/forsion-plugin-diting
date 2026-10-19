@@ -53,7 +53,11 @@ declare const ctx: {
   notify?(message: string, opts?: { level?: 'info' | 'success' | 'warning' | 'error' }): void
   getLocale?(): 'zh' | 'en'
   subscribeLocale?(cb: (locale: 'zh' | 'en') => void): () => void
-  ui?: { mountModelPicker?(el: HTMLElement, options: HostModelPickerOptions): { update(patch: Partial<HostModelPickerOptions>): void; dispose(): void } }
+  ui?: {
+    mountModelPicker?(el: HTMLElement, options: HostModelPickerOptions): { update(patch: Partial<HostModelPickerOptions>): void; dispose(): void }
+    /** 宿主 2026-10-19+:视图头行最左的看法胶囊(⌥⌘V / 命令面板 / 窄宽 / 手机顶栏归宿主);actions = 同一行右边放自己的按钮。 */
+    setViewModes?(el: HTMLElement, spec: ViewModesSpec): ViewModesHandle
+  }
   tangu?: {
     modelCatalog?(kind: 'asr' | 'translation'): Promise<{ defaultModelId: string; models: Array<{ id: string; name: string; source: 'local' | 'forsion' | 'direct'; available: boolean; supportsCorrection: boolean }> }>
     agents?(): Array<{ slug: string; name: string }>
@@ -76,3 +80,5 @@ interface Window {
 declare module '*.css' { const text: string; export default text }
 
 interface HostModelPickerOptions { kind: 'asr' | 'translation'; value: string; label: string; followLabel: string; scopeKey?: string; disabled?: boolean; onChange(value: string): void }
+interface ViewModesSpec { modes: Array<{ id: string; label: string; labelEn?: string; icon?: string }>; value: string; onChange?(id: string): void }
+interface ViewModesHandle { set(id: string): void; update(patch: Partial<ViewModesSpec>): void; readonly actions: HTMLElement; dispose(): void }

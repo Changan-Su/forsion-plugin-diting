@@ -358,6 +358,23 @@ function summaryPane(): Pane {
 type Tab = 'transcript' | 'notes' | 'summary' | 'split'
 const TABS: Record<Layout, Tab[]> = { transcript: ['transcript', 'notes', 'summary'], notes: ['notes', 'transcript', 'summary'], split: ['split', 'summary'] }
 const TAB_KEY: Record<Tab, Key> = { transcript: 'tabTranscript', notes: 'tabNotes', summary: 'tabSummary', split: 'tabSplit' }
+/** 宿主看法胶囊窄时只留图标(宿主插件图标词表里的名字)。 */
+const TAB_ICON: Record<Tab, string> = { transcript: 'audio-lines', notes: 'notebook-pen', summary: 'list-checks', split: 'layout' }
+
+// 每次记录各记各的看到哪一格(视图模式标准:按「看的那个东西」记);新记录从第一格开始。
+const TAB_MEMO = 'plugin.diting.tabs'
+const TAB_MEMO_CAP = 200 // ponytail: 只留最近 200 次记录,超出按写入先后丢
+function tabMemo(id: string): string {
+  try { const v = JSON.parse(localStorage.getItem(TAB_MEMO) || '{}'); return typeof v?.[id] === 'string' ? v[id] : '' } catch { return '' }
+}
+function rememberTab(id: string, tab: string): void {
+  try {
+    const v = JSON.parse(localStorage.getItem(TAB_MEMO) || '{}') as Record<string, string>
+    delete v[id]; v[id] = tab // 删了再放 = 排到最后
+    for (const k of Object.keys(v).slice(0, -TAB_MEMO_CAP)) delete v[k]
+    localStorage.setItem(TAB_MEMO, JSON.stringify(v))
+  } catch { /* 存不上就只在这次生效 */ }
+}
 const LAYOUTS: Array<[Layout, Key, Key]> = [['transcript', 'layoutTranscript', 'layoutTranscriptHint'], ['notes', 'layoutNotes', 'layoutNotesHint'], ['split', 'layoutSplit', 'layoutSplitHint']]
 const DISPLAYS: Array<[Prefs['display'], Key]> = [['stacked', 'stacked'], ['paired', 'paired'], ['original', 'originalOnly']]
 
@@ -439,6 +456,10 @@ function menu(rec: Rec): HTMLElement {
 
 export function mountSession(el: HTMLElement): () => void {
   const root = h('div', { class: 'dt' }); el.append(root)
+  // 新宿主(2026-10-19+):转写 / 笔记 / 纪要交给宿主画在视图头行最左(⌥⌘V、命令面板、窄宽、手机顶栏都归宿主),
+  // 目标语言和「…」挪进同一行右边;老宿主照旧画自己那排标签。
+  let modes: ViewModesHandle | null = null; let stopActions: (() => void) | null = null
+  const dropModes = (): void => { stopActions?.(); stopActions = null; modes?.dispose(); modes = null; delete root.dataset.hosthead }
   let key = ''; let panes: Pane[] = []
   let bar: HTMLElement; let body: HTMLElement; let head: HTMLElement | null = null; let banner: HTMLElement
   let modelCleanup: (() => void) | null = null
@@ -448,7 +469,8 @@ export function mountSession(el: HTMLElement): () => void {
     if (!S.open && S.live) S.open = S.live
     const rec = S.open; const p = prefs()
     const tabs = TABS[p.layout]
-    const tab = (tabs.includes(V.tab as Tab) ? V.tab : tabs[0]) as Tab
+    const want = V.tab || (rec ? tabMemo(rec.id) : '')
+    const tab = (tabs.includes(want as Tab) ? want : tabs[0]) as Tab
     root.dataset.layout = p.layout; root.dataset.display = rec?.target ? p.display : 'original'
     const next = [S.vault, rec?.id ?? '', p.layout, tab, getLocale()].join('|')
     if (next !== key) {
@@ -456,13 +478,26 @@ export function mountSession(el: HTMLElement): () => void {
       key = next; panes = []; head = null; dockSig = ''; dockEl = null; menuEl = null; menuSig = ''
       bar = h('div', { class: 'dt-bar' }); banner = h('div', { class: 'dt-banner', hidden: true }); body = h('div', { class: 'dt-main' })
       root.replaceChildren(bar, banner, body)
+      if (!S.vault || !rec) dropModes()
       if (!S.vault) body.append(h('p', { class: 'dt-empty big' }, t('noVault')))
       else if (!rec) body.append(h('div', { class: 'dt-scroll' }, startForm()))
       else {
-        bar.append(h('div', { class: 'dt-tabs', role: 'tablist' }, ...tabs.map((id) => h('button', { type: 'button', role: 'tab', class: id === tab ? 'on' : null, 'aria-selected': id === tab, 'data-act': 'tab', 'data-v': id }, t(TAB_KEY[id])))),
-          h('span', { class: 'dt-sp' }))
-        if (canAi()) bar.append(select('target', targetOptions(), rec.target, 'dt-sel pill'))
-        bar.append(btn('menu', t('more'), { icon: 'more', cls: 'dt-ibtn' }))
+        const tools = [...(canAi() ? [select('target', targetOptions(), rec.target, 'dt-sel pill')] : []), btn('menu', t('more'), { icon: 'more', cls: 'dt-ibtn' })]
+        const setViewModes = ctx.ui?.setViewModes
+        if (setViewModes) {
+          const spec = {
+            modes: tabs.map((id) => ({ id, label: t(TAB_KEY[id]), icon: TAB_ICON[id] })),
+            value: tab,
+            onChange: (id: string) => { V.tab = id; V.sel = 0; if (S.open) rememberTab(S.open.id, id); emit() },
+          }
+          if (modes) modes.update(spec)
+          else { modes = setViewModes(el, spec); modes.actions.classList.add('dt', 'dt-hosttools'); stopActions = wire(modes.actions) }
+          modes.actions.replaceChildren(...tools)
+          root.dataset.hosthead = ''
+        } else {
+          bar.append(h('div', { class: 'dt-tabs', role: 'tablist' }, ...tabs.map((id) => h('button', { type: 'button', role: 'tab', class: id === tab ? 'on' : null, 'aria-selected': id === tab, 'data-act': 'tab', 'data-v': id }, t(TAB_KEY[id])))),
+            h('span', { class: 'dt-sp' }), ...tools)
+        }
         head = h('div', { class: 'dt-head' },
           h('h1', { class: 'dt-h1', contenteditable: 'plaintext-only', spellcheck: 'false', 'data-field': 'recTitle' }, rec.title),
           h('div', { class: 'dt-meta' }), h('div', { class: 'dt-model-controls' }))
@@ -500,7 +535,7 @@ export function mountSession(el: HTMLElement): () => void {
       if (box.dataset.sig !== sig) { box.dataset.sig = sig; box.replaceChildren(...meta) }
     }
     for (const pane of panes) pane.update(rec)
-    const pick = bar.querySelector<HTMLSelectElement>('select')
+    const pick = (modes?.actions ?? bar).querySelector<HTMLSelectElement>('select')
     if (pick && document.activeElement !== pick && pick.value !== rec.target) pick.value = rec.target
 
     const dsig = dockKey(rec)
@@ -515,7 +550,7 @@ export function mountSession(el: HTMLElement): () => void {
   const stopUi = wire(root)
   void vaultReady().then((ok) => { if (S.vault !== ok) { S.vault = ok; emit() } })
   draw()
-  return () => { off(); stopUi(); modelCleanup?.(); cancelAnimationFrame(raf); root.remove() }
+  return () => { off(); stopUi(); modelCleanup?.(); dropModes(); cancelAnimationFrame(raf); root.remove() }
 }
 
 // ── 点击和输入(主页面、底部字幕、章节共用)────────────────────────────────────────────────────────────
@@ -529,7 +564,7 @@ function wire(root: HTMLElement): () => void {
     const d = hit.dataset; const rec = S.open; const segId = Number(d.seg)
     const seg = rec?.segments.find((s) => s.id === segId)
     switch (d.act) {
-      case 'tab': V.tab = d.v || ''; V.sel = 0; break
+      case 'tab': V.tab = d.v || ''; V.sel = 0; if (rec && V.tab) rememberTab(rec.id, V.tab); break
       case 'sel': if (!String(window.getSelection() || '') && !hit.closest('.compact')) V.sel = V.sel === segId ? 0 : segId; break
       case 'seek': if (rec) void seek(rec, Number(d.t) || 0, true); return
       case 'play': if (rec) { if (A.rec === rec.id && A.el && A.on) A.el.pause(); else void seek(rec, A.rec === rec.id ? A.time : 0, true) } return
@@ -557,7 +592,8 @@ function wire(root: HTMLElement): () => void {
       case 'ask': if (rec) engage(rec, { ask: t(d.ask === 'askRecent' ? 'askRecentPrompt' : 'askSoFarPrompt') }); return
       case 'chatOpen': if (rec) engage(rec); return
       case 'menu': V.menu = !V.menu; V.armDelete = false; break
-      case 'layout': setPref('layout', d.v as Layout); V.tab = ''; V.menu = false; syncCaptions(); return
+      // 主动换布局 = 落到新布局的第一格,并记给这次记录(不然按记录记住的那格会把「并排」拉回「纪要」)
+      case 'layout': { const l = d.v as Layout; setPref('layout', l); V.tab = TABS[l]?.[0] ?? ''; if (rec && V.tab) rememberTab(rec.id, V.tab); V.menu = false; syncCaptions(); return }
       case 'display': setPref('display', d.v as Prefs['display']); V.menu = false; return
       case 'openMd': if (rec) ctx.app.openNote?.(`${rec.folder}/${d.f}`); V.menu = false; break
       case 'reveal': if (rec) ctx.app.reveal?.(`${rec.folder}/${FILES.transcript}`); V.menu = false; break
