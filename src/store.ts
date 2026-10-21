@@ -91,7 +91,7 @@ async function readIndexAt(folder:string):Promise<IndexRow[]> {
 const upgrades=new Map<string,Promise<void>>(),migrated=new Set<string>()
 export function upgradeStorage():Promise<void>{
   const vault=ctx.app.vaultRoot?.(),target=root(),scope=`${vault}\n${target}`
-  if(!OWNER||!vault||!ctx.app.migrateWorkFolder||localStorage.getItem('plugin.diting.workFolder')||!target.startsWith('Plugins/'))return Promise.resolve()
+  if(!OWNER||!vault||String(vault).includes('://')||!ctx.app.migrateWorkFolder||localStorage.getItem('plugin.diting.workFolder')||!target.startsWith('Plugins/'))return Promise.resolve()
   if(upgrades.has(scope))return upgrades.get(scope)!
   const task=(async()=>{
     const check=()=>{if(ctx.app.vaultRoot?.()!==vault||root()!==target||!['idle','starting'].includes(S.phase)||S.live||S.summarizing||S.retrying)throw Error(t('recoveryChanged'))}
@@ -99,13 +99,13 @@ export function upgradeStorage():Promise<void>{
     const id='legacy-root-v1'
     if((await ctx.app.migrateWorkFolder!({id,expectedRoot:vault,source:LEGACY[0],target})).status==='complete'){migrated.add(scope);return}
     check()
+    const before=await ctx.app.readFile(`${target}/${FILES.index}`);check()
+    if((await readIndexAt(target)).length)return // Keep the current collection available; recovery compares both.
     const found:Array<{source:string;rows:IndexRow[]}>=[]
     for(const source of LEGACY){const rows=await readIndexAt(source);check();if(rows.length)found.push({source,rows})}
     if(!found.length)return
     if(found.length!==1)throw Error(t('migrationConflict'))
     const {source,rows}=found[0]
-    const before=await ctx.app.readFile(`${target}/${FILES.index}`);check()
-    if((await readIndexAt(target)).length)throw Error(t('migrationConflict'))
     const edits:Array<{path:string;before:string;after:string}>=[],next:IndexRow[]=[],requiredFiles:string[]=[]
     for(const row of rows){
       if(!row.folder.startsWith(source+'/')||row.folder.split('/').some(x=>!x||x==='.'||x==='..')||row.folder.includes('\\'))throw Error(t('recoveryInvalid',{folder:row.folder}))
@@ -124,7 +124,8 @@ export function upgradeStorage():Promise<void>{
     await ctx.app.migrateWorkFolder!({id,expectedRoot:vault,source,target,plan:{index:{path,before,after},edits,requiredFiles}});check()
     migrated.add(scope);cache.clear();hadNotes.clear();ctx.notify?.(t('migrationDone'),{level:'success'})
   })()
-  upgrades.set(scope,task);return task
+  const attempt=task.catch(error=>{upgrades.delete(scope);throw error})
+  upgrades.set(scope,attempt);return attempt
 }
 export async function loadIndex(): Promise<void> {
   const folder=root(),vault=ctx.app.vaultRoot?.()
