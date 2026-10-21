@@ -2,6 +2,11 @@
 const fs=require('fs'),path=require('path'),os=require('os'),assert=require('assert/strict')
 const ROOT=path.resolve(__dirname,'..'),DESK=process.env.DITING_DESKTOP||path.resolve(ROOT,'../bluebird-ux-demo/desktop'),OUT=path.join(ROOT,process.env.PLUGIN_LEGACY_NESTED ? '.shots/migration-id':'.shots/migration')
 const electron=require(DESK+'/scripts/lib/launch-electron.cjs'),{startStubEngine}=require(DESK+'/scripts/lib/stub-engine.cjs'),{skipOnboarding}=require(DESK+'/scripts/lib/skip-onboarding.cjs')
+function priorJournal(vault,source,target,indexPath){
+ const files=[],crypto=require('node:crypto')
+ const walk=rel=>{for(const entry of fs.readdirSync(path.join(vault,target,rel),{withFileTypes:true})){const p=rel ? rel+'/'+entry.name:entry.name;if(entry.isDirectory())walk(p);else if(p!==indexPath)files.push({path:p,hash:crypto.createHash('sha256').update(fs.readFileSync(path.join(vault,target,p))).digest('hex')})}}
+ walk('');return {version:1,complete:process.env.PLUGIN_PRIOR_JOURNAL!=='interrupted',source,target,index:{path:indexPath,before:null,after:fs.readFileSync(path.join(vault,target,indexPath),'utf8')},files}
+}
 async function main(){
  const home=fs.mkdtempSync(path.join(os.tmpdir(),'diting-recovery-')),vault=path.join(home,'Vault'),userData=path.join(home,'userdata'),bundle=path.join(home,'plugins/diting')
  fs.mkdirSync(bundle,{recursive:true});fs.mkdirSync(OUT,{recursive:true})
@@ -18,11 +23,11 @@ async function main(){
   rows.push({id:record.id,folder,title:record.title,createdAt:record.createdAt,duration:1,status:'done'})
  }
  fs.writeFileSync(path.join(vault,legacy,'.diting-index.json'),JSON.stringify(rows))
- if(process.env.PLUGIN_PRIOR_COMPLETE){
+ if(process.env.PLUGIN_PRIOR_JOURNAL){
   assert.equal(legacy,'Plugins/谛听');fs.cpSync(path.join(vault,legacy),path.join(vault,'谛听'),{recursive:true})
   const backupRows=rows.map(row=>({...row,folder:row.folder.replace('Plugins/谛听/','谛听/')}))
   for(const row of backupRows){const p=path.join(vault,row.folder,'.record.json'),rec=JSON.parse(fs.readFileSync(p,'utf8'));rec.folder=row.folder;fs.writeFileSync(p,JSON.stringify(rec))}
-  fs.writeFileSync(path.join(vault,'谛听/.diting-index.json'),JSON.stringify(backupRows));fs.mkdirSync(path.join(vault,'.forsion/plugin-migrations'),{recursive:true});fs.writeFileSync(path.join(vault,'.forsion/plugin-migrations/diting-legacy-root-v1.json'),JSON.stringify({version:1,complete:true,source:'谛听',target:legacy}))
+  fs.writeFileSync(path.join(vault,'谛听/.diting-index.json'),JSON.stringify(backupRows));fs.mkdirSync(path.join(vault,'.forsion/plugin-migrations'),{recursive:true});fs.writeFileSync(path.join(vault,'.forsion/plugin-migrations/diting-legacy-root-v1.json'),JSON.stringify(priorJournal(vault,'谛听',legacy,'.diting-index.json')))
  }
  const original=fs.readFileSync(path.join(vault,legacy,'Previous 1/.record.json'),'utf8')
  const stub=await startStubEngine({models:[{id:'fixture',name:'Fixture',provider:'stub'}]});let app,win;const checks=[]

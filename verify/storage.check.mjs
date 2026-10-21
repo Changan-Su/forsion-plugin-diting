@@ -55,7 +55,8 @@ try{
  await M.loadIndex();assert.equal(M.S.storageError,'');assert.equal(migrations,1);assert.equal(M.S.index[0].id,'new')
  vault='/retry-vault';files.delete('Plugins/diting/.diting-index.json');let attempts=0;ctx.app.migrateWorkFolder=async()=>{if(++attempts===1)throw Error('temporary failure');return {status:'complete'}}
  await assert.rejects(M.upgradeStorage(),/temporary/);await M.upgradeStorage();assert.equal(attempts,2)
- settings.clear();files.clear();vault='/nested-vault';M.S.phase='idle';complete=false;ctx.app.migrateWorkFolder=async request=>{if(!request.plan)return {status:complete?'complete':'needed'};migrationPlan=request;for(const edit of request.plan.edits)files.set(request.target+'/'+edit.path,edit.after);complete=true;return {status:'complete'}}
+ let predecessorStatus='complete'
+ settings.clear();files.clear();vault='/nested-vault';M.S.phase='idle';complete=false;ctx.app.migrateWorkFolder=async request=>{if(request.id==='legacy-root-v1')return {status:predecessorStatus};if(!request.plan)return {status:complete?'complete':'needed'};migrationPlan=request;for(const edit of request.plan.edits)files.set(request.target+'/'+edit.path,edit.after);complete=true;return {status:'complete'}}
  const nested=records.map(rec=>({...rec,folder:rec.folder.replace('谛听/','Plugins/谛听/')}))
  files.set('Plugins/谛听/.diting-index.json',JSON.stringify(nested.map(M.rowOf)));for(const rec of nested)files.set(rec.folder+'/.record.json',JSON.stringify(rec))
  await M.loadIndex();assert.equal(M.S.storageError,'');assert.equal(migrationPlan.source,'Plugins/谛听');assert.ok(M.S.index.every(row=>row.folder.startsWith('Plugins/diting/')))
@@ -63,6 +64,10 @@ try{
  for(const rec of records)files.set(rec.folder+'/.record.json',JSON.stringify(rec));files.set('谛听/.diting-index.json',JSON.stringify(records.map(M.rowOf)))
  files.set('.forsion/plugin-migrations/diting-legacy-root-v1.json',JSON.stringify({version:1,complete:true,target:'Plugins/谛听',source:'谛听'}))
  vault='/prior-complete';complete=false;files.delete('Plugins/diting/.diting-index.json');await M.loadIndex();assert.equal(M.S.storageError,'');assert.equal(migrationPlan.source,'Plugins/谛听');assert.equal(M.S.index.length,2)
+ files.set('.forsion/plugin-migrations/diting-legacy-root-v1.json',JSON.stringify({version:1,complete:false,target:'Plugins/谛听',source:'谛听'}))
+ vault='/prior-interrupted-after-index';complete=false;files.delete('Plugins/diting/.diting-index.json');await M.loadIndex();assert.equal(M.S.storageError,'');assert.equal(migrationPlan.source,'Plugins/谛听')
+ vault='/prior-interrupted-before-index';complete=false;predecessorStatus='needed';files.delete('Plugins/diting/.diting-index.json');await M.loadIndex();assert.equal(M.S.storageError,'');assert.equal(migrationPlan.source,'谛听')
+ files.set('.forsion/plugin-migrations/diting-legacy-root-v1.json',JSON.stringify({version:1,complete:true,target:'Plugins/谛听',source:'谛听'}))
  vault='/prior-deleted';complete=false;files.delete('Plugins/diting/.diting-index.json');files.set('Plugins/谛听/.diting-index.json','[]');await M.loadIndex();assert.equal(M.S.storageError,'');assert.equal(migrationPlan.source,'Plugins/谛听');assert.equal(M.S.index.length,0)
  vault='/invalid-prior-marker';complete=false;files.delete('Plugins/diting/.diting-index.json');files.set('.forsion/plugin-migrations/diting-legacy-root-v1.json','{}');await assert.rejects(M.upgradeStorage());
  vault='/old-api';const currentFolder=ctx.app.workFolder;ctx.app.workFolder=()=> 'Plugins/谛听';ctx.app.migrateWorkFolder=async()=>{throw Error('old migration API must not be called')};await M.upgradeStorage();ctx.app.workFolder=currentFolder
