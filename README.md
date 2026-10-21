@@ -4,6 +4,10 @@ Forsion 的插件:把上课、开会、访谈时听到的话变成带时间的�
 
 A Forsion plugin that turns what you hear in a class, meeting or interview into timestamped text, translates it as it goes, answers questions about it at any time, and writes a summary when it ends. (English notes are at the end.)
 
+**0.3.2：** 支持迁移 API 的新版桌面宿主会将旧录音、转写、笔记与纪要一次迁入默认的 `Plugins/diting`。保留原目录备份，不改变手动工作文件夹；冲突或资料不完整时保留原件并提供恢复入口。每个智库单独记录迁移完成状态，已删除记录不会再次导入。旧宿主仍使用显式恢复流程。
+
+**0.3.2:** Supported desktop hosts migrate legacy recordings, transcripts, notes and minutes once to `Plugins/diting`. The original folder stays as a backup and custom work folders are preserved. Conflicts or incomplete records retain the originals and a recovery flow. Completion is recorded per vault, so deleted records are not imported again. Older hosts keep explicit recovery.
+
 ## 安装
 
 Forsion 桌面端 2.13.2 及以上:打开「商店」,搜「谛听」,点安装。装好后在功能条的「…」里找「谛听」,或者在命令面板里搜「谛听：打开」。
@@ -37,7 +41,7 @@ sh install.sh prod      # 装进 ~/.forsion;不带参数装进开发用的 ~/.fo
 都在你的笔记库里,每次记录一个文件夹(默认在 `Plugins/diting/` 下,可以在插件设置里改工作文件夹):
 
 ```
-谛听/2026-10-13 1405 PHYS3721 第 2 讲/
+Plugins/diting/2026-10-13 1405 PHYS3721 第 2 讲/
   转写.md        每句一段,[mm:ss] 开头;译文是紧跟着的引用块
   笔记.md        你记的
   纪要.md        结束后写的
