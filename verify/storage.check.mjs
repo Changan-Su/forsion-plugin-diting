@@ -32,5 +32,24 @@ try{
  assert.equal(writes,0);for(const [name,text] of original)assert.equal(files.get(name),text)
  files.set('谛听/.diting-index.json','{bad');await M.loadIndex();assert.ok(M.S.storageError)
  await assert.rejects(M.saveRec(records[0]),/索引|index/);assert.equal(writes,0)
- console.log('storage checks ok: explicit recovery, both counts, busy state, missing record, vault race, read errors, no migration, corrupt-index write protection')
+ // Automatic migration is performed once by the host transaction, before index loading.
+ settings.clear();files.clear();vault='/automatic-vault';M.S.storageError='';M.S.phase='idle'
+ files.set('谛听/.diting-index.json',JSON.stringify(records.map(M.rowOf)))
+ for(const rec of records)files.set(rec.folder+'/.record.json',JSON.stringify(rec))
+ let migrationPlan,complete=false,migrations=0
+ ctx.app.migrateWorkFolder=async request=>{
+  if(!request.plan)return {status:complete?'complete':'needed'}
+  migrationPlan=request;migrations++;for(const edit of request.plan.edits)files.set(request.target+'/'+edit.path,edit.after)
+  complete=true;return {status:'complete'}
+ }
+ await M.loadIndex();assert.equal(M.S.storageError,'');assert.equal(migrations,1);assert.equal(M.S.index.length,2)
+ assert.ok(M.S.index.every(row=>row.folder.startsWith('Plugins/谛听/')))
+ assert.equal(JSON.parse(files.get('Plugins/谛听/Record 1/.record.json')).folder,'Plugins/谛听/Record 1')
+ assert.equal(files.get('谛听/Record 1/.record.json'),JSON.stringify(records[0]));assert.equal(settings.size,0)
+ assert.equal(migrationPlan.plan.index.before,null);assert.equal(M.S.recovery.length,0)
+ await M.loadIndex();assert.equal(migrations,1)
+ settings.set('plugin.diting.workFolder','谛听');vault='/manual-vault';await M.loadIndex();assert.equal(migrations,1);assert.equal(M.S.index.length,2)
+ settings.clear();vault='/conflicting-vault';complete=false;files.set('Plugins/谛听/.diting-index.json',JSON.stringify([{id:'new',folder:'Plugins/谛听/New',title:'New'}]))
+ await M.loadIndex();assert.ok(M.S.storageError);assert.equal(migrations,1);assert.equal(M.S.index[0].id,'new')
+ console.log('storage checks ok: explicit recovery, both counts, busy state, missing record, vault race, read errors, corrupt-index protection, one-time automatic upgrade, schema paths, manual overrides, target conflicts')
 }finally{rmSync(dir,{recursive:true,force:true})}

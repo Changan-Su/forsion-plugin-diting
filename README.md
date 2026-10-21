@@ -102,3 +102,10 @@ Apache-2.0
 The plugin detects indexes in known previous folders, shows both counts and requires two-step confirmation before changing its standard work-folder setting. It validates record JSON first and refuses recovery during recording/processing or after a vault change. Files stay in place; unreadable indexes stop writes. Space layout and agent prompt versions remain 0.3.0 because this patch changes neither.
 
 Verification: `npm run verify` includes `verify/storage.check.mjs` for recovery/race/no-migration checks. `DITING_DESKTOP=/absolute/desktop node verify/recovery.e2e.cjs` uses compiled isolated Electron, synthetic old records and silent WAV media; run through the Forsion devlock. It does not modify the installed plugin, real recording data or microphone.
+
+
+### Upgrade migration / 升级迁移
+
+With a host exposing `ctx.app.migrateWorkFolder`, opening an older library automatically migrates its known legacy folder once to the default `Plugins/<plugin name>` before reading or saving records. The old folder remains a backup. Explicit work-folder settings are preserved. Conflicting indexes, missing media, corrupt records and multiple legacy data sets keep the original data and require recovery review. Older hosts retain the explicit previous-folder recovery flow; automatic migration requires the paired host update.
+
+支持迁移 API 的新版宿主会在读取或保存前自动迁移一次旧资料到 `Plugins/<插件名>`；原目录保留为备份，不改用户手动设置的工作文件夹。遇到冲突、资料损坏或缺失时保留原文件并提示恢复；旧宿主继续提供手动接回入口。

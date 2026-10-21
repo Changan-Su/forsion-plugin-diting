@@ -32,6 +32,7 @@ const gone = new Set<string>()
 
 export function saveRec(rec: Rec): Promise<void> {
   return queued(async () => {
+    await upgradeStorage()
     if(S.storageError)throw Error(S.storageError)
     if (gone.has(rec.id)) return
     const f = rec.folder
@@ -87,13 +88,51 @@ async function readIndexAt(folder:string):Promise<IndexRow[]> {
     return value
   }catch{throw Error(t('storageUnreadable',{folder}))}
 }
+const upgrades=new Map<string,Promise<void>>(),migrated=new Set<string>()
+export function upgradeStorage():Promise<void>{
+  const vault=ctx.app.vaultRoot?.(),target=root(),scope=`${vault}\n${target}`
+  if(!OWNER||!vault||!ctx.app.migrateWorkFolder||localStorage.getItem('plugin.diting.workFolder')||!target.startsWith('Plugins/'))return Promise.resolve()
+  if(upgrades.has(scope))return upgrades.get(scope)!
+  const task=(async()=>{
+    const check=()=>{if(ctx.app.vaultRoot?.()!==vault||root()!==target||S.phase!=='idle'||S.summarizing||S.retrying)throw Error(t('recoveryChanged'))}
+    check()
+    const id='legacy-root-v1'
+    if((await ctx.app.migrateWorkFolder!({id,expectedRoot:vault,source:LEGACY[0],target})).status==='complete'){migrated.add(scope);return}
+    check()
+    const found:Array<{source:string;rows:IndexRow[]}>=[]
+    for(const source of LEGACY){const rows=await readIndexAt(source);check();if(rows.length)found.push({source,rows})}
+    if(!found.length)return
+    if(found.length!==1)throw Error(t('migrationConflict'))
+    const {source,rows}=found[0]
+    const before=await ctx.app.readFile(`${target}/${FILES.index}`);check()
+    if((await readIndexAt(target)).length)throw Error(t('migrationConflict'))
+    const edits:Array<{path:string;before:string;after:string}>=[],next:IndexRow[]=[],requiredFiles:string[]=[]
+    for(const row of rows){
+      if(!row.folder.startsWith(source+'/')||row.folder.split('/').some(x=>!x||x==='.'||x==='..')||row.folder.includes('\\'))throw Error(t('recoveryInvalid',{folder:row.folder}))
+      const relative=row.folder.slice(source.length+1),path=`${relative}/${FILES.record}`
+      const raw=await ctx.app.readFile(`${source}/${path}`);check()
+      const data=raw?JSON.parse(raw):null,rec=data?reviveRec(data,row.folder):null
+      if(!rec||rec.id!==row.id||data.folder!==row.folder)throw Error(t('recoveryInvalid',{folder:row.folder}))
+      if(rec.audio){if(/[\\/]/.test(rec.audio)||rec.audio==='.'||rec.audio==='..')throw Error(t('recoveryInvalid',{folder:row.folder}));requiredFiles.push(`${relative}/${rec.audio}`)}
+      const folder=target+'/'+relative
+      edits.push({path,before:raw!,after:JSON.stringify({...data,folder})});next.push({...row,folder})
+    }
+    const raw=await ctx.app.readFile(`${source}/${FILES.index}`);check()
+    if(JSON.stringify(JSON.parse(raw||'null'))!==JSON.stringify(rows))throw Error(t('recoveryChanged'))
+    const after=JSON.stringify(next),path=FILES.index
+    edits.push({path,before:raw!,after})
+    await ctx.app.migrateWorkFolder!({id,expectedRoot:vault,source,target,plan:{index:{path,before,after},edits,requiredFiles}});check()
+    migrated.add(scope);cache.clear();hadNotes.clear();ctx.notify?.(t('migrationDone'),{level:'success'})
+  })()
+  upgrades.set(scope,task);return task
+}
 export async function loadIndex(): Promise<void> {
   const folder=root(),vault=ctx.app.vaultRoot?.()
   let rows:IndexRow[]=[],error=''
-  try{rows=await readIndexAt(folder)}catch(e){error=String((e as Error).message)}
+  try{await upgradeStorage();rows=await readIndexAt(folder)}catch(e){error=t('migrationFailed',{message:String((e as Error).message)});try{rows=await readIndexAt(folder)}catch{}}
   const recovery:typeof S.recovery=[]
   for(const old of LEGACY){
-    if(old===folder)continue
+    if(old===folder||migrated.has(`${vault}\n${folder}`))continue
     try{const previous=await readIndexAt(old);if(previous.length)recovery.push({folder:old,count:previous.length})}
     catch(e){recovery.push({folder:old,count:0,error:String((e as Error).message)})}
   }
@@ -140,9 +179,11 @@ export async function heal(): Promise<void> {
   }
 }
 
-let ready: Promise<void> | null = null
+let ready: Promise<void> | null = null,readyScope=''
 /** 主窗口的开场:读列表、把上次没收尾的收尾。新建记录之前必须等它:没读过列表就写,会拿空列表把盘上的盖掉。 */
 export function init(): Promise<void> {
+  const scope=`${ctx.app.vaultRoot?.()}\n${root()}`
+  if(scope!==readyScope){readyScope=scope;ready=null}
   return (ready ??= (async () => {
     try {
       // 库还没开:这次不算,下次再来。

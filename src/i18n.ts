@@ -9,6 +9,9 @@ const ZH = {
   recoveryBusy: '请先结束当前录音或处理任务，再切换工作文件夹。',
   recoveryChanged: '智库或工作文件夹已改变，请重新查看恢复方案。',
   recoveryInvalid: '旧记录无法验证：{folder}。文件和设置均未修改。',
+  migrationDone: '历史记录已迁移到 Plugins；旧目录保留为备份。',
+  migrationConflict: '发现多份历史资料或新目录已有记录，请先检查恢复方案。',
+  migrationFailed: '自动迁移未完成，已停止保存，原资料保留：{message}',
   recoveryDone: '已接回旧目录，原文件保持不变。',
 
   modelAsr: "转文字模型",
@@ -83,6 +86,9 @@ const ZH = {
 }
 
 const EN: typeof ZH = {
+  migrationDone: 'Previous records migrated to Plugins. The original folder is retained as a backup.',
+  migrationConflict: 'Multiple data sets exist or the new folder already has records. Review recovery options first.',
+  migrationFailed: 'Automatic migration could not finish. Saving is paused and original data is retained: {message}',
   previousRecords: 'Found {count} previous records in {folder}; {current} currently has {currentCount}.',
   reviewRecovery: 'Review recovery options',
   confirmRecovery: 'Confirm previous folder',
