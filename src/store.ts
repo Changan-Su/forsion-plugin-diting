@@ -103,6 +103,7 @@ export function upgradeStorage():Promise<void>{
     if((await readIndexAt(target)).length)return // Keep the current collection available; recovery compares both.
     const previousRaw=await ctx.app.readFile('.forsion/plugin-migrations/diting-legacy-root-v1.json');check()
     const previous=previousRaw ? JSON.parse(previousRaw):null
+    if(previousRaw&&(!previous||previous.version!==1||typeof previous.complete!=='boolean'||previous.target!=='Plugins/谛听'))throw Error(t('storageUnreadable',{folder:'Plugins/谛听'}))
     const priorComplete=previous?.version===1 && previous.complete===true && previous.target==='Plugins/谛听'
     const sources=priorComplete ? [previous.target]:LEGACY.filter(folder=>folder!==target)
     const found:Array<{source:string;rows:IndexRow[]}>=[]

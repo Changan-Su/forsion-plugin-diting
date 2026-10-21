@@ -64,6 +64,7 @@ try{
  files.set('.forsion/plugin-migrations/diting-legacy-root-v1.json',JSON.stringify({version:1,complete:true,target:'Plugins/谛听',source:'谛听'}))
  vault='/prior-complete';complete=false;files.delete('Plugins/diting/.diting-index.json');await M.loadIndex();assert.equal(M.S.storageError,'');assert.equal(migrationPlan.source,'Plugins/谛听');assert.equal(M.S.index.length,2)
  vault='/prior-deleted';complete=false;files.delete('Plugins/diting/.diting-index.json');files.set('Plugins/谛听/.diting-index.json','[]');await M.loadIndex();assert.equal(M.S.storageError,'');assert.equal(migrationPlan.source,'Plugins/谛听');assert.equal(M.S.index.length,0)
+ vault='/invalid-prior-marker';complete=false;files.delete('Plugins/diting/.diting-index.json');files.set('.forsion/plugin-migrations/diting-legacy-root-v1.json','{}');await assert.rejects(M.upgradeStorage());
  vault='/old-api';const currentFolder=ctx.app.workFolder;ctx.app.workFolder=()=> 'Plugins/谛听';ctx.app.migrateWorkFolder=async()=>{throw Error('old migration API must not be called')};await M.upgradeStorage();ctx.app.workFolder=currentFolder
  console.log('storage checks ok: explicit recovery, both counts, busy state, missing record, vault race, read errors, corrupt-index protection, one-time automatic upgrade, schema paths, manual overrides, target conflicts')
 }finally{rmSync(dir,{recursive:true,force:true})}
