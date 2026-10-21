@@ -1,4 +1,6 @@
-## 0.3.2 — Automatic upgrade migration / 升级自动迁移
+## 0.3.2 — 2026-10-21
+
+Automatic upgrade migration / 升级自动迁移
 
 - On a host with the migration API, previous vault-root or Chinese Plugins-folder records automatically copy to the default `Plugins/diting` before the first list/read/write. Record/index paths are rewritten together; recordings, transcripts, notes and minutes retain their content.
 - Original folders stay as backup. A per-vault completion journal prevents repeated imports, including after records are deleted. Manual folder choices are respected; conflicts or incomplete records stop automatic migration and retain recovery options.
