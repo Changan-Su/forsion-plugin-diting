@@ -42,7 +42,8 @@ try{
   migrationPlan=request;migrations++;for(const edit of request.plan.edits)files.set(request.target+'/'+edit.path,edit.after)
   complete=true;return {status:'complete'}
  }
- await M.loadIndex();assert.equal(M.S.storageError,'');assert.equal(migrations,1);assert.equal(M.S.index.length,2)
+ M.S.phase='starting'
+ await M.loadIndex();M.S.phase='idle';assert.equal(M.S.storageError,'');assert.equal(migrations,1);assert.equal(M.S.index.length,2)
  assert.ok(M.S.index.every(row=>row.folder.startsWith('Plugins/谛听/')))
  assert.equal(JSON.parse(files.get('Plugins/谛听/Record 1/.record.json')).folder,'Plugins/谛听/Record 1')
  assert.equal(files.get('谛听/Record 1/.record.json'),JSON.stringify(records[0]));assert.equal(settings.size,0)

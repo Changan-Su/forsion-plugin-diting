@@ -94,7 +94,7 @@ export function upgradeStorage():Promise<void>{
   if(!OWNER||!vault||!ctx.app.migrateWorkFolder||localStorage.getItem('plugin.diting.workFolder')||!target.startsWith('Plugins/'))return Promise.resolve()
   if(upgrades.has(scope))return upgrades.get(scope)!
   const task=(async()=>{
-    const check=()=>{if(ctx.app.vaultRoot?.()!==vault||root()!==target||S.phase!=='idle'||S.summarizing||S.retrying)throw Error(t('recoveryChanged'))}
+    const check=()=>{if(ctx.app.vaultRoot?.()!==vault||root()!==target||!['idle','starting'].includes(S.phase)||S.live||S.summarizing||S.retrying)throw Error(t('recoveryChanged'))}
     check()
     const id='legacy-root-v1'
     if((await ctx.app.migrateWorkFolder!({id,expectedRoot:vault,source:LEGACY[0],target})).status==='complete'){migrated.add(scope);return}
