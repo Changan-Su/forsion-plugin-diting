@@ -205,8 +205,10 @@ try {
   const out = await build({ ...options, write: false, minify: true, logLevel: 'silent' })
   assert.equal(readFileSync('main.js', 'utf8'), out.outputFiles[0].text, 'main.js 和源码不一致:先跑 node build.mjs')
   const pkg = JSON.parse(readFileSync('package.json', 'utf8')); const man = JSON.parse(readFileSync('manifest.json', 'utf8')); const space = JSON.parse(readFileSync('spaces/diting/space.json', 'utf8'))
-  assert.equal(man.version, pkg.version); assert.equal(space.version, pkg.version)
-  assert.ok(new RegExp(`^version = "${pkg.version.replace(/\./g, '\\.')}"$`, 'm').test(readFileSync('agents/diting-companion/config.toml', 'utf8')))
+  assert.equal(man.version, pkg.version)
+  // Recovery does not change the Space layout or agent instructions; retain their independent versions.
+  assert.equal(space.version, '0.3.0')
+  assert.ok(new RegExp('^version = "0\\.3\\.0"$', 'm').test(readFileSync('agents/diting-companion/config.toml', 'utf8')))
   assert.ok(man.descriptionEn && man.nameEn && man.onboarding.en.steps.length === man.onboarding.steps.length)
   new Function('ctx', readFileSync('main.js', 'utf8'))
   console.log(`\n${n} 项全过`)

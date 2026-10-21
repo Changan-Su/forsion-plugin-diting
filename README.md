@@ -94,3 +94,11 @@ Install: Forsion desktop 2.13.2 or later → Store → search "Diting". Tested o
 ## License
 
 Apache-2.0
+
+## 0.3.1 previous-folder recovery / 旧目录接回
+
+默认工作文件夹变为 `Plugins/谛听` 后，插件会检查已知旧位置 `谛听` / `Diting` 的索引。首页分别显示新旧数量，用户先查看恢复方案，再确认使用旧目录；文件保留原位，记录路径不重写。确认前校验每条记录 JSON，录音或处理进行中、智库已切换、索引或记录无法读取时拒绝切换。损坏索引阻止保存。检测不执行模型请求。
+
+The plugin detects indexes in known previous folders, shows both counts and requires two-step confirmation before changing its standard work-folder setting. It validates record JSON first and refuses recovery during recording/processing or after a vault change. Files stay in place; unreadable indexes stop writes. Space layout and agent prompt versions remain 0.3.0 because this patch changes neither.
+
+Verification: `npm run verify` includes `verify/storage.check.mjs` for recovery/race/no-migration checks. `DITING_DESKTOP=/absolute/desktop node verify/recovery.e2e.cjs` uses compiled isolated Electron, synthetic old records and silent WAV media; run through the Forsion devlock. It does not modify the installed plugin, real recording data or microphone.

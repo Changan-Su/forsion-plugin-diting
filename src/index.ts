@@ -53,7 +53,7 @@ ctx.registerListSource?.({
       }
     })
   },
-  subscribe: on,
+  subscribe: (cb) => {const off=on(cb);void vaultReady().then(ok=>ok ? loadIndex():undefined).catch(()=>undefined);return off},
   activeKey: () => S.open?.id ?? null,
   open: (item) => { void openRecord(item.key) },
   get actions() { return [{ id: 'new', label: t('newRecord'), primary: true, run: newRecord }, ...(OWNER ? [{ id: 'import', label: t('importFile'), run: pickImport }] : [])] },

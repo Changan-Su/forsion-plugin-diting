@@ -8,7 +8,7 @@ import { canRetry, importFile } from './engine'
 import { duration, getLocale, t, TARGETS, targetLabel, type Key } from './i18n'
 import { changes, clock, FILES, parseClock, type Layout, type Rec, type Segment, type SummaryStyle } from './model'
 import { emit, on, OWNER, prefs, S, setPref, type Prefs } from './state'
-import { loadRec, vaultReady } from './store'
+import { loadRec, vaultReady, reconnectLegacy, root as folderRoot } from './store'
 import { act, refresh } from './sync'
 
 const AGENT = 'diting-companion'
@@ -52,7 +52,7 @@ function select(action: string, options: Array<[string, string]>, value: string,
 const targetOptions = (): Array<[string, string]> => [['', t('targetOff')], ...TARGETS.map((l): [string, string] => [l.id, t(l.key)])]
 
 // ── 这个窗口的界面状态(放在模块上:打开 / 关掉底部面板会把主区重挂一遍,放在视图里就丢了)────────────────
-const V = { tab: '', sel: 0, menu: false, playing: 0, scrollTo: 0, armDelete: false, dragging: false }
+const V = { recoveryArm: '', tab: '', sel: 0, menu: false, playing: 0, scrollTo: 0, armDelete: false, dragging: false }
 
 // 回放。声音只在用户自己点了播放以后才会出;测试里一律静音。
 const A = { el: null as HTMLAudioElement | null, rec: '', url: '', time: 0, on: false, rate: 1, gen: 0 }
@@ -378,6 +378,22 @@ function rememberTab(id: string, tab: string): void {
 const LAYOUTS: Array<[Layout, Key, Key]> = [['transcript', 'layoutTranscript', 'layoutTranscriptHint'], ['notes', 'layoutNotes', 'layoutNotesHint'], ['split', 'layoutSplit', 'layoutSplitHint']]
 const DISPLAYS: Array<[Prefs['display'], Key]> = [['stacked', 'stacked'], ['paired', 'paired'], ['original', 'originalOnly']]
 
+function recoveryNotice():HTMLElement {
+  const box=h('div',{class:'dt-recovery','data-recovery':true})
+  if(S.storageError)box.append(h('p',{role:'alert'},S.storageError))
+  for(const item of S.recovery){
+    const notice=h('div',null,h('p',null,item.error || t('previousRecords',{folder:item.folder,count:item.count,current:folderRoot(),currentCount:S.index.length})))
+    if(!item.error){
+      if(V.recoveryArm===item.folder)notice.append(h('p',null,t('recoveryHint',{folder:item.folder})))
+      const vault=S.recoveryVault,current=S.recoveryFolder
+      const action=btn('recoverLegacy',t(V.recoveryArm===item.folder?'confirmRecovery':'reviewRecovery'),{text:true,cls:'dt-btn',disabled:!OWNER||S.phase!=='idle'||!!S.storageError})
+      action.addEventListener('click',()=>{if(V.recoveryArm!==item.folder){V.recoveryArm=item.folder;emit();return}void reconnectLegacy(item.folder,vault,current).catch(e=>ctx.notify?.(String(e.message||e),{level:'error'}))})
+      notice.append(action)
+    }
+    box.append(notice)
+  }
+  return box
+}
 function startForm(): HTMLElement {
   const p = recordingDraft
   const title = h('input', { class: 'dt-in', type: 'text', placeholder: t('titlePlaceholder'), value: recordingDraft.title, 'data-field': 'title', 'aria-label': t('fieldTitle') })
@@ -472,7 +488,7 @@ export function mountSession(el: HTMLElement): () => void {
     const want = V.tab || (rec ? tabMemo(rec.id) : '')
     const tab = (tabs.includes(want as Tab) ? want : tabs[0]) as Tab
     root.dataset.layout = p.layout; root.dataset.display = rec?.target ? p.display : 'original'
-    const next = [S.vault, rec?.id ?? '', p.layout, tab, getLocale()].join('|')
+    const next = [S.vault, rec?.id ?? '', p.layout, tab, getLocale(),S.index.length,JSON.stringify(S.recovery),S.storageError,V.recoveryArm].join('|')
     if (next !== key) {
       modelCleanup?.(); modelCleanup = null
       key = next; panes = []; head = null; dockSig = ''; dockEl = null; menuEl = null; menuSig = ''
@@ -480,7 +496,7 @@ export function mountSession(el: HTMLElement): () => void {
       root.replaceChildren(bar, banner, body)
       if (!S.vault || !rec) dropModes()
       if (!S.vault) body.append(h('p', { class: 'dt-empty big' }, t('noVault')))
-      else if (!rec) body.append(h('div', { class: 'dt-scroll' }, startForm()))
+      else if (!rec) body.append(h('div', { class: 'dt-scroll' },recoveryNotice(),startForm()))
       else {
         const tools = [...(canAi() ? [select('target', targetOptions(), rec.target, 'dt-sel pill')] : []), btn('menu', t('more'), { icon: 'more', cls: 'dt-ibtn' })]
         const setViewModes = ctx.ui?.setViewModes

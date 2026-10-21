@@ -18,6 +18,10 @@ export const S = {
   /** 导入文件的进度 0..1。 */
   progress: 0,
   index: [] as IndexRow[],
+  recovery: [] as Array<{folder:string;count:number;error?:string}>,
+  storageError: '',
+  recoveryVault: undefined as string|null|undefined,
+  recoveryFolder: '',
   /** 这个窗口正在看的记录(可能就是 live 那个对象)。 */
   open: null as Rec | null,
   /** 正在批量重试的记录 id。 */
