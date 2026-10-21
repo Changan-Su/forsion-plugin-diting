@@ -8,7 +8,7 @@ import { FILES, notesMd, reviveRec, rowOf, transcriptMd, type IndexRow, type Rec
 import { emit, OWNER, S, sleep } from './state'
 import { t } from './i18n'
 
-export const root = (): string => (ctx.app.workFolder?.() || '谛听').replace(/^\/+|\/+$/g, '')
+export const root = (): string => (ctx.app.workFolder?.(ctx.app.migrateWorkFolder ? {preferId:true}:undefined) || '谛听').replace(/^\/+|\/+$/g, '')
 
 /** 库是惰性恢复的:视图刚挂上那一下 vaultRoot() 可能还是 null。等它有值;一直没有 = 用户没开库。 */
 export async function vaultReady(ms = 8000): Promise<boolean> {
@@ -32,6 +32,7 @@ const gone = new Set<string>()
 
 export function saveRec(rec: Rec): Promise<void> {
   return queued(async () => {
+    await upgradeStorage()
     if(S.storageError)throw Error(S.storageError)
     if (gone.has(rec.id)) return
     const f = rec.folder
@@ -77,7 +78,7 @@ async function writeIndex(rows: IndexRow[]): Promise<void> {
   emit()
 }
 
-const LEGACY = ['谛听','Diting']
+const LEGACY = ['Plugins/谛听','谛听','Diting']
 async function readIndexAt(folder:string):Promise<IndexRow[]> {
   try {
     const raw=await ctx.app.readFile(`${folder}/${FILES.index}`)
@@ -87,13 +88,64 @@ async function readIndexAt(folder:string):Promise<IndexRow[]> {
     return value
   }catch{throw Error(t('storageUnreadable',{folder}))}
 }
+const upgrades=new Map<string,Promise<void>>(),migrated=new Set<string>()
+export function upgradeStorage():Promise<void>{
+  const vault=ctx.app.vaultRoot?.(),target=root(),scope=`${vault}\n${target}`
+  if(!OWNER||!vault||String(vault).includes('://')||!ctx.app.migrateWorkFolder||localStorage.getItem('plugin.diting.workFolder')||(!target.startsWith('Plugins/')||LEGACY.includes(target)))return Promise.resolve()
+  if(upgrades.has(scope))return upgrades.get(scope)!
+  const task=(async()=>{
+    const check=()=>{if(ctx.app.vaultRoot?.()!==vault||root()!==target||!['idle','starting'].includes(S.phase)||S.live||S.summarizing||S.retrying)throw Error(t('recoveryChanged'))}
+    check()
+    const id='english-id-v1'
+    if((await ctx.app.migrateWorkFolder!({id,expectedRoot:vault,source:LEGACY[0],target})).status==='complete'){migrated.add(scope);return}
+    check()
+    const before=await ctx.app.readFile(`${target}/${FILES.index}`);check()
+    if((await readIndexAt(target)).length)return // Keep the current collection available; recovery compares both.
+    const previousRaw=await ctx.app.readFile('.forsion/plugin-migrations/diting-legacy-root-v1.json');check()
+    const previous=previousRaw ? JSON.parse(previousRaw):null
+    if(previousRaw&&(!previous||previous.version!==1||typeof previous.complete!=='boolean'||!['谛听','Diting'].includes(previous.source)||previous.target!=='Plugins/谛听'))throw Error(t('storageUnreadable',{folder:'Plugins/谛听'}))
+    let priorComplete=previous?.complete===true
+    if(previous&&!priorComplete){
+      const reconciled=await ctx.app.migrateWorkFolder!({id:'legacy-root-v1',expectedRoot:vault,source:previous.source,target:previous.target});check()
+      priorComplete=reconciled.status==='complete'
+    }
+    const sources=previous ? [priorComplete ? previous.target:previous.source]:LEGACY.filter(folder=>folder!==target)
+    const found:Array<{source:string;rows:IndexRow[]}>=[]
+    for(const source of sources){
+      if(priorComplete&&await ctx.app.readFile(`${source}/${FILES.index}`)===null)throw Error(t('storageUnreadable',{folder:source}))
+      const rows=await readIndexAt(source);check();if(priorComplete||rows.length)found.push({source,rows})
+    }
+    if(!found.length)return
+    if(found.length!==1)throw Error(t('migrationConflict'))
+    const {source,rows}=found[0]
+    const edits:Array<{path:string;before:string;after:string}>=[],next:IndexRow[]=[],requiredFiles:string[]=[]
+    for(const row of rows){
+      if(!row.folder.startsWith(source+'/')||row.folder.split('/').some(x=>!x||x==='.'||x==='..')||row.folder.includes('\\'))throw Error(t('recoveryInvalid',{folder:row.folder}))
+      const relative=row.folder.slice(source.length+1),path=`${relative}/${FILES.record}`
+      const raw=await ctx.app.readFile(`${source}/${path}`);check()
+      const data=raw?JSON.parse(raw):null,rec=data?reviveRec(data,row.folder):null
+      if(!rec||rec.id!==row.id||data.folder!==row.folder)throw Error(t('recoveryInvalid',{folder:row.folder}))
+      if(rec.audio){if(/[\\/]/.test(rec.audio)||rec.audio==='.'||rec.audio==='..')throw Error(t('recoveryInvalid',{folder:row.folder}));requiredFiles.push(`${relative}/${rec.audio}`)}
+      const folder=target+'/'+relative
+      edits.push({path,before:raw!,after:JSON.stringify({...data,folder})});next.push({...row,folder})
+    }
+    const raw=await ctx.app.readFile(`${source}/${FILES.index}`);check()
+    if(JSON.stringify(JSON.parse(raw||'null'))!==JSON.stringify(rows))throw Error(t('recoveryChanged'))
+    const after=JSON.stringify(next),path=FILES.index
+    edits.push({path,before:raw!,after})
+    await ctx.app.migrateWorkFolder!({id,expectedRoot:vault,source,target,plan:{index:{path,before,after},edits,requiredFiles}});check()
+    migrated.add(scope);cache.clear();hadNotes.clear();ctx.notify?.(t('migrationDone'),{level:'success'})
+  })()
+  const attempt=task.catch(error=>{upgrades.delete(scope);throw error})
+  upgrades.set(scope,attempt);return attempt
+}
 export async function loadIndex(): Promise<void> {
   const folder=root(),vault=ctx.app.vaultRoot?.()
   let rows:IndexRow[]=[],error=''
-  try{rows=await readIndexAt(folder)}catch(e){error=String((e as Error).message)}
+  try{await upgradeStorage();rows=await readIndexAt(folder)}catch(e){error=t('migrationFailed',{message:String((e as Error).message)});try{rows=await readIndexAt(folder)}catch{}}
   const recovery:typeof S.recovery=[]
   for(const old of LEGACY){
-    if(old===folder)continue
+    if(old===folder||migrated.has(`${vault}\n${folder}`))continue
     try{const previous=await readIndexAt(old);if(previous.length)recovery.push({folder:old,count:previous.length})}
     catch(e){recovery.push({folder:old,count:0,error:String((e as Error).message)})}
   }
@@ -140,9 +192,11 @@ export async function heal(): Promise<void> {
   }
 }
 
-let ready: Promise<void> | null = null
+let ready: Promise<void> | null = null,readyScope=''
 /** 主窗口的开场:读列表、把上次没收尾的收尾。新建记录之前必须等它:没读过列表就写,会拿空列表把盘上的盖掉。 */
 export function init(): Promise<void> {
+  const scope=`${ctx.app.vaultRoot?.()}\n${root()}`
+  if(scope!==readyScope){readyScope=scope;ready=null}
   return (ready ??= (async () => {
     try {
       // 库还没开:这次不算,下次再来。

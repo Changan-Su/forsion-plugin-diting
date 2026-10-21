@@ -19,11 +19,12 @@ type HostLocation = 'main' | 'left' | 'right' | 'bottom'
 declare const ctx: {
   app: {
     readFile(path: string): Promise<string | null>
+    migrateWorkFolder?(request: {id:string;expectedRoot:string;source:string;target:string;plan?:{index:{path:string;before:string|null;after:string};edits:Array<{path:string;before:string;after:string}>;requiredFiles?:string[]}}):Promise<{status:'needed'|'complete';backup?:string}>
     writeFile(path: string, text: string): Promise<void>
     writeBytes?(path: string, bytes: Uint8Array | ArrayBuffer): Promise<void>
     readBytes?(path: string): Promise<Uint8Array | null>
     assetUrl?(path: string): string
-    workFolder?(): string
+    workFolder?(options?: { preferId?: boolean }): string
     vaultRoot?(): string | null
     openNote?(path: string, options?: { reuseKey?: string; activate?: boolean; newTab?: boolean }): void
     loadPage(path: string): void

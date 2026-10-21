@@ -386,7 +386,7 @@ function recoveryNotice():HTMLElement {
     if(!item.error){
       if(V.recoveryArm===item.folder)notice.append(h('p',null,t('recoveryHint',{folder:item.folder})))
       const vault=S.recoveryVault,current=S.recoveryFolder
-      const action=btn('recoverLegacy',t(V.recoveryArm===item.folder?'confirmRecovery':'reviewRecovery'),{text:true,cls:'dt-btn',disabled:!OWNER||S.phase!=='idle'||!!S.storageError})
+      const action=btn('recoverLegacy',t(V.recoveryArm===item.folder?'confirmRecovery':'reviewRecovery'),{text:true,cls:'dt-btn',disabled:!OWNER||S.phase!=='idle'})
       action.addEventListener('click',()=>{if(V.recoveryArm!==item.folder){V.recoveryArm=item.folder;emit();return}void reconnectLegacy(item.folder,vault,current).catch(e=>ctx.notify?.(String(e.message||e),{level:'error'}))})
       notice.append(action)
     }
