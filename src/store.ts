@@ -8,7 +8,7 @@ import { FILES, notesMd, reviveRec, rowOf, transcriptMd, type IndexRow, type Rec
 import { emit, OWNER, S, sleep } from './state'
 import { t } from './i18n'
 
-export const root = (): string => (ctx.app.workFolder?.() || '谛听').replace(/^\/+|\/+$/g, '')
+export const root = (): string => (ctx.app.workFolder?.(ctx.app.migrateWorkFolder ? {preferId:true}:undefined) || '谛听').replace(/^\/+|\/+$/g, '')
 
 /** 库是惰性恢复的:视图刚挂上那一下 vaultRoot() 可能还是 null。等它有值;一直没有 = 用户没开库。 */
 export async function vaultReady(ms = 8000): Promise<boolean> {
@@ -78,7 +78,7 @@ async function writeIndex(rows: IndexRow[]): Promise<void> {
   emit()
 }
 
-const LEGACY = ['谛听','Diting']
+const LEGACY = ['Plugins/谛听','谛听','Diting']
 async function readIndexAt(folder:string):Promise<IndexRow[]> {
   try {
     const raw=await ctx.app.readFile(`${folder}/${FILES.index}`)
@@ -91,18 +91,25 @@ async function readIndexAt(folder:string):Promise<IndexRow[]> {
 const upgrades=new Map<string,Promise<void>>(),migrated=new Set<string>()
 export function upgradeStorage():Promise<void>{
   const vault=ctx.app.vaultRoot?.(),target=root(),scope=`${vault}\n${target}`
-  if(!OWNER||!vault||String(vault).includes('://')||!ctx.app.migrateWorkFolder||localStorage.getItem('plugin.diting.workFolder')||!target.startsWith('Plugins/'))return Promise.resolve()
+  if(!OWNER||!vault||String(vault).includes('://')||!ctx.app.migrateWorkFolder||localStorage.getItem('plugin.diting.workFolder')||(!target.startsWith('Plugins/')||LEGACY.includes(target)))return Promise.resolve()
   if(upgrades.has(scope))return upgrades.get(scope)!
   const task=(async()=>{
     const check=()=>{if(ctx.app.vaultRoot?.()!==vault||root()!==target||!['idle','starting'].includes(S.phase)||S.live||S.summarizing||S.retrying)throw Error(t('recoveryChanged'))}
     check()
-    const id='legacy-root-v1'
+    const id='english-id-v1'
     if((await ctx.app.migrateWorkFolder!({id,expectedRoot:vault,source:LEGACY[0],target})).status==='complete'){migrated.add(scope);return}
     check()
     const before=await ctx.app.readFile(`${target}/${FILES.index}`);check()
     if((await readIndexAt(target)).length)return // Keep the current collection available; recovery compares both.
+    const previousRaw=await ctx.app.readFile('.forsion/plugin-migrations/diting-legacy-root-v1.json');check()
+    const previous=previousRaw ? JSON.parse(previousRaw):null
+    const priorComplete=previous?.version===1 && previous.complete===true && previous.target==='Plugins/谛听'
+    const sources=priorComplete ? [previous.target]:LEGACY.filter(folder=>folder!==target)
     const found:Array<{source:string;rows:IndexRow[]}>=[]
-    for(const source of LEGACY){const rows=await readIndexAt(source);check();if(rows.length)found.push({source,rows})}
+    for(const source of sources){
+      if(priorComplete&&await ctx.app.readFile(`${source}/${FILES.index}`)===null)throw Error(t('storageUnreadable',{folder:source}))
+      const rows=await readIndexAt(source);check();if(priorComplete||rows.length)found.push({source,rows})
+    }
     if(!found.length)return
     if(found.length!==1)throw Error(t('migrationConflict'))
     const {source,rows}=found[0]

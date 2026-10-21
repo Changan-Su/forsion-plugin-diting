@@ -24,7 +24,7 @@ declare const ctx: {
     writeBytes?(path: string, bytes: Uint8Array | ArrayBuffer): Promise<void>
     readBytes?(path: string): Promise<Uint8Array | null>
     assetUrl?(path: string): string
-    workFolder?(): string
+    workFolder?(options?: { preferId?: boolean }): string
     vaultRoot?(): string | null
     openNote?(path: string, options?: { reuseKey?: string; activate?: boolean; newTab?: boolean }): void
     loadPage(path: string): void

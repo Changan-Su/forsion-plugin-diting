@@ -1,6 +1,6 @@
 ## 0.3.2 — Automatic upgrade migration / 升级自动迁移
 
-- On a host with the migration API, previous vault-root records automatically copy to the default `Plugins/谛听` before the first list/read/write. Record/index paths are rewritten together; recordings, transcripts, notes and minutes retain their content.
+- On a host with the migration API, previous vault-root or Chinese Plugins-folder records automatically copy to the default `Plugins/diting` before the first list/read/write. Record/index paths are rewritten together; recordings, transcripts, notes and minutes retain their content.
 - Original folders stay as backup. A per-vault completion journal prevents repeated imports, including after records are deleted. Manual folder choices are respected; conflicts or incomplete records stop automatic migration and retain recovery options.
 - 在新版宿主上自动执行一次旧资料迁移，保留旧目录备份和手动设置；冲突或校验失败时停止保存并显示恢复入口。Space / Agent 版本仍为 0.3.0。
 

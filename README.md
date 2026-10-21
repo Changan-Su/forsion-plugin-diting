@@ -34,7 +34,7 @@ sh install.sh prod      # 装进 ~/.forsion;不带参数装进开发用的 ~/.fo
 
 ## 存在哪里
 
-都在你的笔记库里,每次记录一个文件夹(默认在 `谛听/` 下,可以在插件设置里改工作文件夹):
+都在你的笔记库里,每次记录一个文件夹(默认在 `Plugins/diting/` 下,可以在插件设置里改工作文件夹):
 
 ```
 谛听/2026-10-13 1405 PHYS3721 第 2 讲/
@@ -97,7 +97,7 @@ Apache-2.0
 
 ## 0.3.1 previous-folder recovery / 旧目录接回
 
-默认工作文件夹变为 `Plugins/谛听` 后，插件会检查已知旧位置 `谛听` / `Diting` 的索引。首页分别显示新旧数量，用户先查看恢复方案，再确认使用旧目录；文件保留原位，记录路径不重写。确认前校验每条记录 JSON，录音或处理进行中、智库已切换、索引或记录无法读取时拒绝切换。损坏索引阻止保存。检测不执行模型请求。
+0.3.1 使用的是 `Plugins/谛听`，检查已知旧位置 `谛听` / `Diting` 的索引；下述确认接回是旧宿主的兼容方式，新宿主按下节自动迁移。首页分别显示新旧数量，用户先查看恢复方案，再确认使用旧目录；文件保留原位，记录路径不重写。确认前校验每条记录 JSON，录音或处理进行中、智库已切换、索引或记录无法读取时拒绝切换。损坏索引阻止保存。检测不执行模型请求。
 
 The plugin detects indexes in known previous folders, shows both counts and requires two-step confirmation before changing its standard work-folder setting. It validates record JSON first and refuses recovery during recording/processing or after a vault change. Files stay in place; unreadable indexes stop writes. Space layout and agent prompt versions remain 0.3.0 because this patch changes neither.
 
@@ -106,6 +106,10 @@ Verification: `npm run verify` includes `verify/storage.check.mjs` for recovery/
 
 ### Upgrade migration / 升级迁移
 
-With a host exposing `ctx.app.migrateWorkFolder`, opening an older library automatically migrates its known legacy folder once to the default `Plugins/<plugin name>` before reading or saving records. The old folder remains a backup. Explicit work-folder settings are preserved. Conflicting indexes, missing media, corrupt records and multiple legacy data sets keep the original data and require recovery review. Older hosts retain the explicit previous-folder recovery flow; automatic migration requires the paired host update.
+With a host exposing `ctx.app.migrateWorkFolder`, opening an older library automatically migrates its known legacy folder once to the default `Plugins/diting` before reading or saving records. The old folder remains a backup. Explicit work-folder settings are preserved. Conflicting indexes, missing media, corrupt records and multiple legacy data sets keep the original data and require recovery review. Older hosts retain the explicit previous-folder recovery flow; automatic migration requires the paired host update.
 
-支持迁移 API 的新版宿主会在读取或保存前自动迁移一次旧资料到 `Plugins/<插件名>`；原目录保留为备份，不改用户手动设置的工作文件夹。遇到冲突、资料损坏或缺失时保留原文件并提示恢复；旧宿主继续提供手动接回入口。
+支持迁移 API 的新版宿主会在读取或保存前自动迁移一次旧资料到 `Plugins/diting`；原目录保留为备份，不改用户手动设置的工作文件夹。遇到冲突、资料损坏或缺失时保留原文件并提示恢复；旧宿主继续提供手动接回入口。
+
+New default folders use the stable English plugin ID. Both the original vault-root folder and the previous Chinese `Plugins` folder are recognized; multiple populated sources require review. Use `PLUGIN_LEGACY_NESTED=1` with the Electron acceptance command to exercise the previous Chinese `Plugins` layout.
+
+新默认目录使用稳定的英文插件 ID；库根旧目录和上一版中文 `Plugins` 目录均可识别。存在多份非空旧资料时保留原件并提示核对。
