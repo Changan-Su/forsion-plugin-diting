@@ -113,3 +113,11 @@ With a host exposing `ctx.app.migrateWorkFolder`, opening an older library autom
 New default folders use the stable English plugin ID. Both the original vault-root folder and the previous Chinese `Plugins` folder are recognized; multiple populated sources require review. Use `PLUGIN_LEGACY_NESTED=1` with the Electron acceptance command to exercise the previous Chinese `Plugins` layout.
 
 新默认目录使用稳定的英文插件 ID；库根旧目录和上一版中文 `Plugins` 目录均可识别。存在多份非空旧资料时保留原件并提示核对。
+
+To reproduce an interrupted predecessor after its index commit (with the original root backup retained), run under devlock:
+
+```sh
+PLUGIN_LEGACY_NESTED=1 PLUGIN_PRIOR_JOURNAL=interrupted DITING_DESKTOP=/absolute/desktop node verify/recovery.e2e.cjs
+```
+
+复验前序索引已提交但日志未完成的情况：同时设置上述两个环境变量；全程使用隔离智库。
