@@ -1,6 +1,16 @@
 // 界面文案:zh / en 两份键集必须一样(check.mjs 有断言)。语言跟宿主走,切语言时视图不重挂也要变。
 
 const ZH = {
+  previousRecords: '发现旧目录 {folder} 中有 {count} 份历史记录；当前 {current} 有 {currentCount} 份。',
+  reviewRecovery: '查看恢复方案',
+  confirmRecovery: '确认继续使用旧目录',
+  recoveryHint: '继续使用 {folder}？文件保留原位，之后新增记录也保存到这里。不会自动合并两处资料。',
+  storageUnreadable: '无法读取 {folder} 的索引，请先检查资料；已停止保存。',
+  recoveryBusy: '请先结束当前录音或处理任务，再切换工作文件夹。',
+  recoveryChanged: '智库或工作文件夹已改变，请重新查看恢复方案。',
+  recoveryInvalid: '旧记录无法验证：{folder}。文件和设置均未修改。',
+  recoveryDone: '已接回旧目录，原文件保持不变。',
+
   modelAsr: "转文字模型",
   modelTranslation: "翻译模型",
   followVoice: "跟随语音设置",
@@ -73,6 +83,16 @@ const ZH = {
 }
 
 const EN: typeof ZH = {
+  previousRecords: 'Found {count} previous records in {folder}; {current} currently has {currentCount}.',
+  reviewRecovery: 'Review recovery options',
+  confirmRecovery: 'Confirm previous folder',
+  recoveryHint: 'Continue using {folder}? Files stay in place, and new records will be saved there. The two folders will not be merged automatically.',
+  storageUnreadable: 'Cannot read the index in {folder}. Check the data before saving; writes have stopped.',
+  recoveryBusy: 'Finish the current recording or processing task before changing the work folder.',
+  recoveryChanged: 'The vault or work folder has changed. Review recovery options again.',
+  recoveryInvalid: 'Could not verify the previous record: {folder}. Files and settings are unchanged.',
+  recoveryDone: 'Previous folder reconnected. Existing files stay in place.',
+
   modelAsr: "Transcription model",
   modelTranslation: "Translation model",
   followVoice: "Follow voice settings",

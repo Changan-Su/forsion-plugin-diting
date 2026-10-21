@@ -1,3 +1,9 @@
+## 0.3.1 — Previous-folder recovery / 旧目录接回
+
+- Detect known previous recording directories and show both old/current counts with explicit confirmation. Validate record JSON before reconnecting the standard work folder; keep paths and files unchanged.
+- Separate unreadable indexes from empty storage and block writes when the index is invalid. Refuse folder recovery during active processing or after a vault change.
+- 旧目录检测与确认接回；保留原位置和路径；索引损坏时停止保存。Space / Agent 指令版本保持 0.3.0，避免无关布局重置或提示改动。
+
 # 更新记录
 
 ## 0.3.0 — 2026-10-19

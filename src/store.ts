@@ -6,6 +6,7 @@
 
 import { FILES, notesMd, reviveRec, rowOf, transcriptMd, type IndexRow, type Rec } from './model'
 import { emit, OWNER, S, sleep } from './state'
+import { t } from './i18n'
 
 export const root = (): string => (ctx.app.workFolder?.() || '谛听').replace(/^\/+|\/+$/g, '')
 
@@ -31,6 +32,7 @@ const gone = new Set<string>()
 
 export function saveRec(rec: Rec): Promise<void> {
   return queued(async () => {
+    if(S.storageError)throw Error(S.storageError)
     if (gone.has(rec.id)) return
     const f = rec.folder
     await ctx.app.writeFile(`${f}/${FILES.record}`, JSON.stringify(rec))
@@ -75,12 +77,53 @@ async function writeIndex(rows: IndexRow[]): Promise<void> {
   emit()
 }
 
+const LEGACY = ['谛听','Diting']
+async function readIndexAt(folder:string):Promise<IndexRow[]> {
+  try {
+    const raw=await ctx.app.readFile(`${folder}/${FILES.index}`)
+    if(raw===null)return []
+    const value=JSON.parse(raw)
+    if(!Array.isArray(value)||value.some(row=>!row||typeof row.id!=='string'||typeof row.folder!=='string'||typeof row.title!=='string'))throw Error('invalid index')
+    return value
+  }catch{throw Error(t('storageUnreadable',{folder}))}
+}
 export async function loadIndex(): Promise<void> {
-  const raw = await ctx.app.readFile(`${root()}/${FILES.index}`)
-  let rows: IndexRow[] = []
-  try { const j = JSON.parse(raw || '[]'); if (Array.isArray(j)) rows = j.filter((r) => r && typeof r.id === 'string' && typeof r.folder === 'string') } catch { /* 坏了当空的 */ }
-  S.index = rows
-  emit()
+  const folder=root(),vault=ctx.app.vaultRoot?.()
+  let rows:IndexRow[]=[],error=''
+  try{rows=await readIndexAt(folder)}catch(e){error=String((e as Error).message)}
+  const recovery:typeof S.recovery=[]
+  for(const old of LEGACY){
+    if(old===folder)continue
+    try{const previous=await readIndexAt(old);if(previous.length)recovery.push({folder:old,count:previous.length})}
+    catch(e){recovery.push({folder:old,count:0,error:String((e as Error).message)})}
+  }
+  if(root()!==folder||ctx.app.vaultRoot?.()!==vault)return
+  S.index=rows;S.storageError=error;S.recovery=recovery;S.recoveryVault=vault;S.recoveryFolder=folder;emit()
+}
+/** Confirmation changes only the standard work-folder setting. Original record paths stay valid. */
+export function reconnectLegacy(folder:string,expectedVault:string|null|undefined,expectedFolder:string):Promise<void>{
+  return queued(async()=>{
+    if(!OWNER||S.phase!=='idle'||S.summarizing||S.retrying)throw Error(t('recoveryBusy'))
+    if(!LEGACY.includes(folder))throw Error(t('recoveryChanged'))
+    const check=()=>{
+      if(S.phase!=='idle'||S.summarizing||S.retrying)throw Error(t('recoveryBusy'))
+      if(ctx.app.vaultRoot?.()!==expectedVault||root()!==expectedFolder)throw Error(t('recoveryChanged'))
+    }
+    check()
+    await readIndexAt(expectedFolder);check()
+    const rows=await readIndexAt(folder);check()
+    if(!rows.length)throw Error(t('recoveryChanged'))
+    for(const row of rows){
+      if(!row.folder.startsWith(folder+'/')||row.folder.split('/').some(part=>part==='..'))throw Error(t('recoveryInvalid',{folder:row.folder}))
+      const raw=await ctx.app.readFile(`${row.folder}/${FILES.record}`);check()
+      let rec:Rec|null=null
+      try{rec=raw ? reviveRec(JSON.parse(raw),row.folder):null}catch{}
+      if(!rec||rec.id!==row.id)throw Error(t('recoveryInvalid',{folder:row.folder}))
+    }
+    check();localStorage.setItem('plugin.diting.workFolder',folder)
+    cache.clear();hadNotes.clear();S.open=null;ready=null;S.saved++
+    await loadIndex();ctx.notify?.(t('recoveryDone'),{level:'success'})
+  })
 }
 
 export const removeRow = (id: string): Promise<void> => queued(() => writeIndex(S.index.filter((r) => r.id !== id)))
@@ -104,7 +147,7 @@ export function init(): Promise<void> {
     try {
       // 库还没开:这次不算,下次再来。
       if (!(await vaultReady())) { ready = null; return }
-      await loadIndex(); await heal()
+      await loadIndex(); if(S.storageError)throw Error(S.storageError);await heal()
     } catch (e) { ready = null; throw e }
   })())
 }
