@@ -1,3 +1,4 @@
 node_modules
 .shots/
+verify/.out/
 .DS_Store
