@@ -68,9 +68,9 @@ async function main() {
   for (const f of ['manifest.json', 'main.js', 'icon.svg', 'icon.png', 'spaces', 'agents']) fs.cpSync(path.join(HERE, f), path.join(dest, f), { recursive: true })
 
   // 离线语音模型:链接本机已有的
-  const model = [path.join(os.homedir(), '.forsion-dev/models/sensevoice'), path.join(os.homedir(), '.forsion/models/sensevoice')].find((p) => fs.existsSync(path.join(p, 'tokens.txt')))
+  const model = [process.env.DITING_MODEL, path.join(os.homedir(), '.forsion-dev/models/sensevoice'), path.join(os.homedir(), '.forsion/models/sensevoice')].filter(Boolean).find((p) => fs.existsSync(path.join(p, 'tokens.txt')))
   if (!model) throw new Error('本机没有离线语音模型(设置 › 语音 里下载一次)')
-  fs.mkdirSync(path.join(home, 'models'), { recursive: true }); fs.symlinkSync(model, path.join(home, 'models', 'sensevoice'))
+  fs.mkdirSync(path.join(home, 'models'), { recursive: true }); fs.symlinkSync(model, path.join(home, 'models', 'sensevoice'), process.platform === 'win32' ? 'junction' : 'dir')
   fs.writeFileSync(path.join(home, 'config.json'), JSON.stringify({ asr: { backend: 'local' } }))
 
   // 一条「上次没正常结束」的旧记录(夹具;插件自己装好是空的)
@@ -197,7 +197,8 @@ async function main() {
       const shown = (tr ? tr.trs : []).filter(Boolean)
       const calls = inline.filter((b) => !String(b.instruction || '').includes('"chapters"'))
       if (HOST_SEAM) {
-        ok('翻译走宿主的翻译口子:引擎收到的是 translate 动作 + 目标语言,显示的只有译文', calls.length > 0 && calls.every((b) => b.action === 'translate' && b.language === 'English' && b.selection) && shown.length > 0 && shown.every((x) => x.startsWith('EN: ') && !x.includes('<')), `${calls.length} 次;第一句:${shown[0] || ''}`)
+        const targetLanguage = { zh: 'Simplified Chinese', en: 'English', ja: 'Japanese', ko: 'Korean', fr: 'French', de: 'German', es: 'Spanish' }[process.env.DITING_TARGET || 'en']
+        ok('翻译走宿主的翻译口子:引擎收到的是 translate 动作 + 目标语言,显示的只有译文', calls.length > 0 && calls.every((b) => b.action === 'translate' && b.language === targetLanguage && b.selection) && shown.length > 0 && shown.every((x) => x.startsWith('EN: ') && !x.includes('<')), `${calls.length} 次;第一句:${shown[0] || ''}`)
         ok('默认不改原文(「顺带纠正」关着)', tr && tr.fixed === 0)
         // 打开「翻译时顺带纠正听错的词」:后面的句子回到聊天模型那条(按固定格式回话、原文被改正)
         await T(() => { localStorage.setItem('plugin.diting.fix', 'true') })
@@ -289,8 +290,10 @@ async function main() {
     ok('回放能拖到后面(静音)', pl.muted === true && Math.abs(pl.time - target) < 1.5 && pl.on === false, JSON.stringify(pl))
 
     // ⑤ 布局 / 标签
-    await win.locator('[data-act="tab"][data-v="summary"]').click(); await shot('05-summary')
-    await win.locator('[data-act="tab"][data-v="notes"]').click(); await shot('06-notes')
+    // Current hosts put these modes in the shared view header; old hosts render
+    // plugin-local tab buttons. Exercise the visible control in either host.
+    await win.locator('button:visible').filter({ hasText: /^纪要$/ }).first().click(); await shot('05-summary')
+    await win.locator('button:visible').filter({ hasText: /^笔记$/ }).first().click(); await shot('06-notes')
     await win.locator('[data-act="menu"]').click(); await shot('07-menu')
     await win.locator('.dt-menu [data-act="layout"][data-v="split"]').click(); await win.waitForSelector('.dt-two', { timeout: 8000 })
     ok('并排布局', (await win.locator('.dt-two .dt-scroll').count()) === 2); await shot('08-split')
