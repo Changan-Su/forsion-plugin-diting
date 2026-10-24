@@ -21,3 +21,15 @@ node verify/smoke.cjs
 ```
 
 长运行的两段隐藏检查各至少 5 分钟；切换 Space 的现有检查为 12 秒，未声称完成所有物理后台场景。
+# 2026-10-24 续验：真实最小化、缩放和强退
+
+宿主使用 Genesis `codex/windows-remaining-acceptance` 的 Windows 音频时钟修复，插件发布 bundle 不变。Windows 11 26200、Electron 40.10.2，隔离 profile、离线 SenseVoice、英文 PCM 文件麦克风，`DITING_TARGET=zh`。
+
+- 短流程 40/40，包括实际最小化/托盘、110%/125% UI 缩放、Mini 操作、真实强退后同 profile 重启恢复已落盘文字。
+- 显式关闭 CDP 焦点模拟后，`HIDE_MS=330000 WINDOWS_BACKGROUND_CASE=minimize WINDOWS_EXTENDED=1` 的严格 hidden 长最小化流程 39/39：330 秒推进 330.0 秒，hidden→hidden，原生 minimized=true。记录共 366 秒，媒体回放约 366.544 秒。
+- 三段长流程的切 Space 330 秒推进 331.0 秒，托盘继续录及真实 125 秒 MP3/M4A/MP4 解码/转写/原文件落盘通过。该次最小化虽音频时长正常，但页面 visible，严格 hidden 项未通过；旧 Ribbon 定位脚本又在 125% 中断，不冒充整套通过。
+- Ribbon 在 125% 展开后仍会虚拟化尾部，台架现实际滚动再找插件；`reload-probe.cjs` 可在 smoke 自己的临时 profile 查询真实插件/视图/Space 注册状态。英文到英文会正确跳过翻译，不能拿它跑要求出现译文的断言。
+- Windows 最小化时原生 AudioContext 变慢的修复在宿主侧：保护音频所在 renderer 的已有计时精度请求，浏览器主进程的策略不够。独立探针 20 秒非静音 PCM 19.968 秒通过。
+
+用户暂不能配合真实麦克风说话、拔插与权限弹窗，相关项目仍未验，issue #1 保持开放。GUI 工具后因无法可靠确认 Windows 浏览器 URL 终止，本轮未绕过限制或关闭缺证据的 issue。
+

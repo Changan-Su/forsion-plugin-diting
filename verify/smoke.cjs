@@ -65,7 +65,7 @@ async function main() {
 
   // 插件:只拷发布时会带的那几样
   const dest = path.join(home, 'plugins', 'diting'); fs.mkdirSync(dest, { recursive: true })
-  for (const f of ['manifest.json', 'main.js', 'icon.svg', 'icon.png', 'spaces', 'agents']) fs.cpSync(path.join(HERE, f), path.join(dest, f), { recursive: true })
+  for (const f of ['manifest.json', 'main.js', 'icon.svg', 'icon.png', 'spaces', 'agents']) fs.cpSync(f === 'main.js' && process.env.DITING_BUNDLE ? process.env.DITING_BUNDLE : path.join(HERE, f), path.join(dest, f), { recursive: true })
 
   // 离线语音模型:链接本机已有的
   const model = [process.env.DITING_MODEL, path.join(os.homedir(), '.forsion-dev/models/sensevoice'), path.join(os.homedir(), '.forsion/models/sensevoice')].filter(Boolean).find((p) => fs.existsSync(path.join(p, 'tokens.txt')))
@@ -124,13 +124,19 @@ async function main() {
   })
 
   if (process.env.MODEL_UI) fs.writeFileSync(path.join(home, 'config.json'), JSON.stringify({ asr: { backend: 'local' }, models: { translate: 'm1' }, providers: [{ providerId: 'probe', baseUrl: stub.url, apiKey: 'test-only', asrModelIds: ['speech'] }] }))
+  for (const d of [userData, `${userData}-dev`]) fs.writeFileSync(path.join(d, 'tangu-desktop-config.json'), JSON.stringify({ mode: 'external', backendUrl: stub.url, token: 'fixture', modelId: 'm1' }))
 
   // 裸起 Electron 再用 CDP 接上:playwright 的 _electron.launch 会顶掉 AudioServiceOutOfProcess,假麦克风就没声音了
   // (desktop 的 scripts/lib/voice-fixture.cjs 记过)。主进程那头(隐藏 / 关闭窗口)走 --inspect。
   const port = await freePort(); const iport = await freePort()
-  const child = spawn(require(path.join(DESK, 'node_modules/electron')), [...mic, `--remote-debugging-port=${port}`, `--inspect=${iport}`, `--user-data-dir=${userData}`, '--lang=zh-CN', DESK, ...MAC_FLAGS], {
-    cwd: DESK, env: workspaceEnv({ ...process.env, TANGU_HOME: home, TANGU_BACKEND_URL: stub.url, TANGU_HARNESS_QUIET: '1' }), stdio: 'ignore',
-  })
+  const launchDesktop = () => {
+    const child = spawn(require(path.join(DESK, 'node_modules/electron')), [...mic, `--remote-debugging-port=${port}`, `--inspect=${iport}`, `--user-data-dir=${userData}`, '--lang=zh-CN', DESK, ...MAC_FLAGS], {
+      cwd: DESK, env: workspaceEnv({ ...process.env, TANGU_HOME: home, TANGU_BACKEND_URL: stub.url, TANGU_HARNESS_QUIET: '1' }), stdio: ['ignore', 'pipe', 'pipe'],
+    })
+    for (const output of [child.stdout, child.stderr]) output.on('data', data => fs.appendFileSync(path.join(home, 'desktop.log'), data))
+    return child
+  }
+  let child = launchDesktop()
   const mainEval = async (expression) => {
     const list = await (await fetch(`http://127.0.0.1:${iport}/json/list`)).json()
     const ws = new WebSocket(list[0].webSocketDebuggerUrl)
@@ -153,9 +159,27 @@ async function main() {
     throw new Error('30 秒没找到主窗口')
   }
   let failed = null; let browser = null
+  const consoleErrors = []
   const pages = () => (browser ? browser.contexts().flatMap((c) => c.pages()) : [])
   try {
     let win = await attach()
+    if (process.env.AUDIO_PROBE) await win.addInitScript(() => {
+      // Observe the native callback without replacing its data or scheduling.
+      window.__audioProbe = []
+      const original = AudioContext.prototype.createScriptProcessor
+      AudioContext.prototype.createScriptProcessor = function (...args) {
+        const node = original.apply(this, args)
+        const context = this
+        const row = { rate: context.sampleRate, samples: 0, callbacks: 0, maxGap: 0, lastPlayback: null, start: context.currentTime, wall: Date.now(), context: () => context.currentTime }
+        window.__audioProbe.push(row)
+        node.addEventListener('audioprocess', e => {
+          row.samples += e.inputBuffer.length; row.callbacks++
+          if (row.lastPlayback !== null) row.maxGap = Math.max(row.maxGap, e.playbackTime - row.lastPlayback)
+          row.lastPlayback = e.playbackTime
+        })
+        return node
+      }
+    })
     mainUrl = win.url().split('#')[0]
     await mainWin('setContentSize', 1440, 900)
     await win.waitForTimeout(2000)
@@ -164,15 +188,48 @@ async function main() {
     await win.reload(); await win.waitForSelector('#root', { timeout: 30_000 }); await win.waitForTimeout(2500)
     for (const label of ['跳过引导', 'Skip']) { const b = win.locator(`text=${label}`).first(); if (await b.count().catch(() => 0)) { await b.click().catch(() => {}); break } }
     await win.waitForSelector('.dv-groupview', { timeout: 30_000 })
-    const errors = []; const watch = (pg) => pg.on('pageerror', (e) => errors.push(String(e))); watch(win)
+    const errors = []
+    const watch = pg => { pg.on('pageerror', e => errors.push(String(e))); pg.on('console', m => { if (m.type() === 'error' || m.type() === 'warning') consoleErrors.push(m.text()) }) }; watch(win)
     const shot = async (name, page = win) => { await page.waitForTimeout(350); await page.screenshot({ path: path.join(SHOTS, `${name}.png`) }) }
     const enter = async (label) => {
       const hit = () => win.evaluate((l) => { const b = [...document.querySelectorAll('.rb-space')].find((x) => [x.getAttribute('aria-label'), x.getAttribute('title'), (x.querySelector('.rb-label')?.textContent || '').trim()].includes(l)); if (b) b.click(); return !!b }, label)
-      if (!(await hit())) { await win.locator('.rb-top .rb-more').first().click(); await win.waitForTimeout(400); if (!(await hit())) throw new Error(`功能条上没有 ${label}`) }
+      let found = await hit()
+      if (!found) {
+        // Plugins register asynchronously after a window reload. Wait for the
+        // actual space button; the workspace shell alone is not plugin readiness.
+        for (let i = 0; i < 40 && !found; i++) {
+          // Reload preserves an expanded ribbon. Toggle only a collapsed one;
+          // otherwise a pending plugin load gets hidden for the whole wait.
+          const more = win.locator('.rb-top .rb-more[aria-expanded="false"]').first()
+          if (await more.count()) await more.click()
+          await sleep(500); found = await hit()
+          if (!found && await win.locator('.rb-top .rb-more[aria-expanded="true"]').count()) {
+            // At 125% UI zoom the expanded ribbon still virtualizes its tail.
+            // Scroll the actual ribbon instead of assuming all icons exist.
+            await win.locator('.rb-top .rb-strip').hover(); await win.mouse.wheel(0, 220)
+          }
+        }
+        if (!found) {
+          const diagnostic = await win.evaluate(async () => {
+            const src = document.querySelector('script[type="module"][src]').src
+            const mod = await import(src)
+            const store = Object.values(mod).find(x => typeof x === 'function' && x.getState?.().activeIds)
+            const s = store?.getState()
+            return { url: location.href, plugins: await window.amadeus.listPlugins().then(xs => xs.map(x => ({ id: x.id, blocked: x.blocked })), e => String(e)), disabled: localStorage.getItem('amadeus.plugins.disabled'), buttons: [...document.querySelectorAll('.rb-space')].map(x => x.getAttribute('aria-label')), host: s ? { active: s.activeIds, plugins: s.plugins.map(p => ({ id: p.id, error: p.error })), views: s.views.map(v => ({ plugin: v.pluginId, id: v.item.id })), keys: Object.keys(s) } : null }
+          })
+          fs.writeFileSync(path.join(SHOTS, 'missing-space.json'), JSON.stringify(diagnostic, null, 2))
+          throw new Error(`功能条上没有 ${label}`)
+        }
+      }
       await win.evaluate(() => document.querySelector('.rb-open-top .rb-more')?.click()); await win.waitForTimeout(1200)
     }
     const T = (fn, arg) => win.evaluate(fn, arg)
     const state = () => T(() => { const t = window.__DITING_TEST__; const r = t.S.live; return { phase: t.S.phase, seconds: t.S.seconds, segs: r ? r.segments.length : -1, texts: r ? r.segments.map((s) => s.text) : [], tr: r ? r.segments.filter((s) => s.trState === 'done').length : 0, trs: r ? r.segments.map((s) => s.tr || '') : [], fixed: r ? r.segments.filter((s) => s.raw).length : 0, notes: r ? r.notes.map((n) => n.text) : [], error: t.S.error, hidden: document.visibilityState, healed: t.S.healed, index: t.S.index.map((x) => `${x.id}:${x.status}`) } })
+    const audioProbe = async label => {
+      if (!process.env.AUDIO_PROBE) return
+      const rows = await inPage('window.__audioProbe?.map(r => ({ rate: r.rate, samples: r.samples, callbacks: r.callbacks, maxGap: r.maxGap, contextSeconds: r.context() - r.start, wallSeconds: (Date.now() - r.wall) / 1000 }))')
+      console.log('AUDIO_PROBE ' + JSON.stringify({ label, rows }))
+    }
     const until = async (what, fn, ms = 30_000) => { const end = Date.now() + ms; for (;;) { const s = await state(); if (fn(s)) return s; if (Date.now() > end) throw new Error(`等不到:${what} — ${JSON.stringify(s)}`); await sleep(400) } }
 
     await enter('谛听')
@@ -209,15 +266,37 @@ async function main() {
       }
     }
     await shot('02-live')
+    if (process.env.AUDIO_STRESS) {
+      const before = await state()
+      const wallStart = Date.now()
+      // Deliberately busy the renderer; the audio thread and MediaRecorder keep running.
+      await T(() => new Promise(resolve => {
+        let times = 0
+        const id = setInterval(() => {
+          const end = performance.now() + 650
+          while (performance.now() < end) { /* simulate a busy application view */ }
+          if (++times === 12) { clearInterval(id); resolve() }
+        }, 1000)
+      }))
+      await sleep(600)
+      const after = await state(); const wall = (Date.now() - wallStart) / 1000
+      ok('渲染线程持续繁忙时采样不丢失', after.seconds - before.seconds > wall * .9, `墙上 ${wall.toFixed(2)}s / 转写 ${(after.seconds - before.seconds).toFixed(2)}s`)
+      await audioProbe('renderer-stress')
+    }
 
     // ② 后台:三种「不在眼前」
     {
-      const a = await state(); await enter('笔记'); await sleep(12_000); const b = await state(); await enter('谛听')
+      const spaceMs = Number(process.env.SPACE_MS || 12_000)
+      const a = await state(); await enter('笔记'); await sleep(spaceMs); const b = await state(); await enter('谛听')
       // 真实录音里一句话可以说十几秒,12 秒里不一定正好说完一句;合成的那几句短,必须有新句子。
-      ok('切到别的 Space 时继续录', b.seconds - a.seconds > 10 && (process.env.DITING_WAV ? b.segs >= a.segs : b.segs > a.segs), `12 秒里时间轴走了 ${(b.seconds - a.seconds).toFixed(1)} 秒,句子 ${a.segs} → ${b.segs}`)
+      ok('切到别的 Space 时继续录', b.seconds - a.seconds > spaceMs / 1000 * 0.9 && (spaceMs >= 300_000 || !process.env.DITING_WAV ? b.segs > a.segs : b.segs >= a.segs), `${spaceMs / 1000} 秒里时间轴走了 ${(b.seconds - a.seconds).toFixed(1)} 秒,句子 ${a.segs} → ${b.segs}`)
+      await audioProbe('space')
     }
     // Playwright 接着页面的时候,页面一直算「看得见」(它开了焦点模拟),量不到真的隐藏。
     // 所以这两段先把它断开(应用不受影响),只从主进程那头读页面里的状态,量完再接回来。
+    const focusSession = await win.context().newCDPSession(win)
+    await focusSession.send('Emulation.setFocusEmulationEnabled', { enabled: false })
+    await focusSession.detach()
     await browser.close(); browser = null
     const PROBE = `(() => { const t = window.__DITING_TEST__; return JSON.stringify({ seconds: t.S.seconds, segs: t.S.live ? t.S.live.segments.length : -1, hidden: document.visibilityState, phase: t.S.phase, error: t.S.error }) })()`
     const probe = async () => JSON.parse(await inPage(PROBE))
@@ -229,13 +308,15 @@ async function main() {
       // 页面知道自己被隐藏要一点时间:最多等 10 秒,等不到就照实记「没隐藏」。
       let mid = await probe(); for (let i = 0; i < 20 && mid.hidden !== 'hidden'; i++) { await sleep(500); mid = await probe() }
       await sleep(HIDE_MS)
-      const b = await probe(); const shown = await inMain('return w.isVisible()'); const wall = (Date.now() - t0) / 1000
+      const b = await probe(); const native = await inMain('return { visible: w.isVisible(), minimized: w.isMinimized() }'); const shown = native.visible; const wall = (Date.now() - t0) / 1000
+      if (op === 'minimize') await mainWin('restore')
       await mainWin('showInactive'); await sleep(800)
       const adv = b.seconds - a.seconds
-      ok(name, (strict ? mid.hidden === 'hidden' && b.hidden === 'hidden' : true) && shown === false && adv > wall * 0.9 && b.segs > mid.segs && b.phase === 'live', `页面可见性=${mid.hidden}→${b.hidden},窗口可见=${shown};墙上 ${wall.toFixed(0)} 秒,时间轴走了 ${adv.toFixed(1)} 秒,句子 ${a.segs} → ${b.segs}${b.error ? `;报错 ${b.error}` : ''}`)
+      ok(name, (strict ? mid.hidden === 'hidden' && b.hidden === 'hidden' : true) && (op === 'minimize' ? native.minimized : shown === false) && adv > wall * 0.9 && b.segs > mid.segs && b.phase === 'live', `页面可见性=${mid.hidden}→${b.hidden},窗口可见=${shown},最小化=${native.minimized};墙上 ${wall.toFixed(0)} 秒,时间轴走了 ${adv.toFixed(1)} 秒,句子 ${a.segs} → ${b.segs}${b.error ? `;报错 ${b.error}` : ''}`)
+      await audioProbe(name)
     }
-    await away('窗口隐藏时继续录', 'hide', true)
-    await away('关掉主窗口(收进托盘)时继续录', 'close', false)
+    await away(process.env.WINDOWS_EXTENDED ? '主窗口实际最小化时继续录' : '窗口隐藏时继续录', process.env.WINDOWS_EXTENDED ? 'minimize' : 'hide', true)
+    if (process.env.WINDOWS_BACKGROUND_CASE !== 'minimize') await away('关掉主窗口(收进托盘)时继续录', 'close', false)
     win = await attach(); watch(win)
 
     // ③ Mini 小窗
@@ -313,6 +394,17 @@ async function main() {
     const wavSec = (bytes.length - 44) / 2 / 16000
     ok('导入文件:转成同样的记录,原文件拷进文件夹', imp.source === 'file' && imp.status === 'done' && imp.segments.length >= 3 && Math.abs(imp.duration - wavSec) < 2 && fs.existsSync(path.join(vault, impFolder, '录音.wav')), `${imp.segments.length} 句,${imp.duration} 秒(文件 ${wavSec.toFixed(1)} 秒):${imp.segments.slice(0, 2).map((s) => s.text).join(' / ')}`)
     await shot('10-imported')
+    if (process.env.MEDIA_DIR) {
+      for (const [ext, type] of [['mp3', 'audio/mpeg'], ['m4a', 'audio/mp4'], ['mp4', 'video/mp4']]) {
+        const file = path.join(process.env.MEDIA_DIR, `lecture.${ext}`), encoded = fs.readFileSync(file).toString('base64')
+        const beforeImport = (await state()).index.length
+        await T(({ b64, ext, type }) => { const bytes = Uint8Array.from(atob(b64), x => x.charCodeAt(0)); void window.__DITING_TEST__.importFile(new File([bytes], `中文 课程.${ext}`, { type })) }, { b64: encoded, ext, type })
+        await until(`导入 ${ext}`, s => s.phase === 'idle' && s.index.length > beforeImport, 180_000)
+        const location = await T(() => window.__DITING_TEST__.S.open.folder)
+        const record = JSON.parse(fs.readFileSync(path.join(vault, location, '.record.json'), 'utf8'))
+        ok(`真实 ${ext} 解码、转写和原文件落盘`, record.status === 'done' && record.source === 'file' && record.segments.length >= 3 && Math.abs(record.duration - 125) < 2 && fs.existsSync(path.join(vault, location, `录音.${ext}`)), `${record.duration}s / ${record.segments.length} 句`)
+      }
+    }
 
     // ⑦ 主窗口收起来以后,从小窗开始一次新的(没有用户在主窗口里点过任何东西)
     if (mini) {
@@ -325,9 +417,54 @@ async function main() {
       ok('从小窗结束', (await until('结束', (s) => s.phase === 'idle', 90_000).then(() => true, () => false)))
       await mainWin('showInactive'); await sleep(800)
     }
+    if (process.env.WINDOWS_EXTENDED && mini) {
+      await mainWin('setContentSize', 1100, 800)
+      for (const zoom of [1.1, 1.25]) {
+        await T(z => localStorage.setItem('forsion_ui_zoom', String(z)), zoom)
+        await win.reload(); await win.waitForSelector('.dv-groupview', { timeout: 30000 }); await enter('谛听')
+        await mini.reload(); await mini.waitForSelector('.dt-mini', { timeout: 20000 })
+        const actual = await T(() => parseFloat(getComputedStyle(document.body).zoom))
+        const miniZoom = await mini.evaluate(() => parseFloat(getComputedStyle(document.body).zoom))
+        ok(`${zoom * 100}% 使用应用实际界面缩放`, Math.abs(actual - zoom) < .001 && Math.abs(miniZoom - zoom) < .001, `main=${actual}, mini=${miniZoom}`)
+        await mini.locator('[data-act="start"]').click(); await until('缩放后开始录音', s => s.phase === 'live')
+        await win.locator('[data-act="menu"]').click()
+        const menu = await win.locator('.dt-menu').evaluate(el => { const r = el.getBoundingClientRect(); return { x: r.x, y: r.y, right: r.right, bottom: r.bottom, w: innerWidth, h: innerHeight } })
+        ok(`${zoom * 100}% 菜单完整显示在窗口内`, menu.x >= 0 && menu.y >= 0 && menu.right <= menu.w + 1 && menu.bottom <= menu.h + 1, JSON.stringify(menu))
+        await win.locator('[data-act="menu"]').click()
+        const controlsInside = async page => page.locator('[data-act="pause"]:visible').first().evaluate(el => { const r = el.getBoundingClientRect(); return r.width > 0 && r.height > 0 && r.left >= 0 && r.top >= 0 && r.right <= innerWidth + 1 && r.bottom <= innerHeight + 1 })
+        ok(`${zoom * 100}% 录音条和 Mini 控件未被裁切`, await controlsInside(win) && await controlsInside(mini))
+        await win.locator('.dt-dock [data-act="pause"]').click(); await until('主窗暂停', s => s.phase === 'paused')
+        await mini.locator('[data-act="resume"]').click(); await until('Mini 继续', s => s.phase === 'live')
+        await shot(`zoom-${Math.round(zoom * 100)}`); await shot(`mini-zoom-${Math.round(zoom * 100)}`, mini)
+        await mini.locator('[data-act="stop"]').click(); await until('缩放测试结束', s => s.phase === 'idle', 90000)
+        ok(`${zoom * 100}% 主窗和 Mini 实际操作生效`, (await state()).phase === 'idle')
+      }
+      await mini.locator('[data-act="start"]').click()
+      await until('强退前有真实转写', s => s.phase === 'live' && s.segs >= 2, 60000)
+      const crashFolder = await T(() => window.__DITING_TEST__.S.live.folder)
+      await sleep(6000)
+      const recordFile = path.join(vault, crashFolder, '.record.json')
+      const beforeCrash = JSON.parse(fs.readFileSync(recordFile, 'utf8'))
+      ok('强退前实际记录已经落盘', beforeCrash.status === 'live' && beforeCrash.segments.length >= 2)
+      const exited = new Promise(resolve => child.once('exit', resolve)); child.kill('SIGKILL'); await exited
+      await browser.close().catch(() => {}); browser = null
+      child = launchDesktop(); win = await attach(); mainUrl = win.url().split('#')[0]; watch(win)
+      await win.waitForSelector('.dv-groupview', { timeout: 30000 }); await enter('谛听')
+      await until('实际强退记录自动收尾', s => s.index.includes(`${beforeCrash.id}:done`), 30000)
+      const recovered = JSON.parse(fs.readFileSync(recordFile, 'utf8'))
+      ok('真实强退重启后记录结束且已识别文字保留', recovered.status === 'done' && recovered.segments.length >= beforeCrash.segments.length && beforeCrash.segments.every((s, i) => recovered.segments[i]?.text === s.text))
+      await shot('actual-crash-recovered')
+    }
     }
     ok('页面没有抛错', errors.length === 0, errors.slice(0, 3).join(' | '))
-  } catch (e) { failed = e } finally {
+  } catch (e) {
+    failed = e
+    for (const [i, page] of pages().entries()) {
+      await page.screenshot({ path: path.join(SHOTS, `failure-${i}.png`), timeout: 5000 }).catch(() => {})
+      fs.writeFileSync(path.join(SHOTS, `failure-${i}.txt`), await page.locator('body').innerText({ timeout: 5000 }).catch(() => 'unavailable'))
+    }
+  } finally {
+    fs.writeFileSync(path.join(SHOTS, 'console-errors.json'), JSON.stringify(consoleErrors, null, 2))
     REAL?.stop()
     await browser?.close().catch(() => {}); child.kill('SIGTERM'); await sleep(800); if (child.exitCode == null) child.kill('SIGKILL'); await stub.close?.()
     if (!process.env.KEEP) fs.rmSync(home, { recursive: true, force: true }); else console.log('临时目录', home)
