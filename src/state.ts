@@ -46,10 +46,10 @@ export function emit(): void { for (const fn of [...subs]) { try { fn() } catch 
 
 // 偏好:和宿主 registerSetting 同一个键名口径(plugin.<id>.<key>),所以别的窗口改了这边也读得到。
 const PREF = 'plugin.diting.'
-export interface Prefs { layout: Layout; display: 'stacked' | 'paired' | 'original'; target: string; keep: boolean; partial: 'auto' | 'on' | 'off'; autoSummary: boolean; fix: boolean; style: SummaryStyle; terms: Record<string, string>; asrModel: string; translationModel: string }
+export interface Prefs { layout: Layout; display: 'stacked' | 'paired' | 'original'; target: string; spoken: string; keep: boolean; partial: 'auto' | 'on' | 'off'; autoSummary: boolean; fix: boolean; style: SummaryStyle; terms: Record<string, string>; asrModel: string; translationModel: string }
 // fix 默认关:打开后要求所选支持指令的翻译模型按固定格式纠错;专用翻译模型只翻译。
 // 翻译默认关:开着的话每句都要调用一次模型,该由用户自己选了语言才开始花这份钱。
-const DEFAULTS = (): Prefs => ({ asrModel: '', translationModel: '', layout: 'transcript', display: 'stacked', target: '', keep: true, partial: 'auto', autoSummary: true, fix: false, style: 'class', terms: {} })
+const DEFAULTS = (): Prefs => ({ asrModel: '', translationModel: '', layout: 'transcript', display: 'stacked', target: '', spoken: '', keep: true, partial: 'auto', autoSummary: true, fix: false, style: 'class', terms: {} })
 
 export function prefs(): Prefs {
   const d = DEFAULTS(); const out = { ...d } as Record<string, unknown>

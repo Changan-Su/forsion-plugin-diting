@@ -5,7 +5,7 @@
 import { canAi } from './ai'
 import { chooseTarget, closeConfiguration, mountModelControls, prepareDraft, recordingDraft, showGlossary } from './configuration'
 import { canRetry, importFile } from './engine'
-import { duration, getLocale, t, TARGETS, targetLabel, type Key } from './i18n'
+import { duration, getLocale, SPOKEN, t, TARGETS, targetLabel, type Key } from './i18n'
 import { changes, clock, FILES, parseClock, type Layout, type Rec, type Segment, type SummaryStyle } from './model'
 import { emit, on, OWNER, prefs, S, setPref, type Prefs } from './state'
 import { loadRec, vaultReady, reconnectLegacy, root as folderRoot } from './store'
@@ -49,6 +49,7 @@ function select(action: string, options: Array<[string, string]>, value: string,
   el.value = value
   return el
 }
+const spokenOptions = (): Array<[string, string]> => SPOKEN.map((l): [string, string] => [l.id, t(l.key)])
 const targetOptions = (): Array<[string, string]> => [['', t('targetOff')], ...TARGETS.map((l): [string, string] => [l.id, t(l.key)])]
 
 // ── 这个窗口的界面状态(放在模块上:打开 / 关掉底部面板会把主区重挂一遍,放在视图里就丢了)────────────────
@@ -401,6 +402,7 @@ function startForm(): HTMLElement {
   return h('div', { class: 'dt-start' },
     h('h1', null, t('startTitle')), h('p', null, t('startHint')), h('div', { class: 'dt-model-controls' }),
     h('div', { class: 'dt-row' }, h('label', null, t('fieldTitle')), title),
+    h('div', { class: 'dt-row' }, h('label', null, t('fieldSpoken')), select('prefSpoken', spokenOptions(), p.spoken ?? prefs().spoken)),
     h('div', { class: 'dt-row' }, h('label', null, t('fieldTarget')), select('prefTarget', targetOptions(), p.target)),
     h('div', { class: 'dt-row' }, h('label', null, t('fieldKeep')), keep),
     h('div', { class: 'dt-row note' }, t('keepHint')),
@@ -600,7 +602,7 @@ function wire(root: HTMLElement): () => void {
       case 'summarize': if (rec) act({ c: 'summarize', rec: rec.id, style: prefs().style }); return
       case 'start': {
         const p = recordingDraft
-        act({ c: 'start', title: root.querySelector<HTMLInputElement>('[data-field="title"]')?.value || '', target: p.target, keep: p.keep, asrModel: p.asrModel, translationModel: p.translationModel })
+        act({ c: 'start', title: root.querySelector<HTMLInputElement>('[data-field="title"]')?.value || '', target: p.target, spoken: p.spoken, keep: p.keep, asrModel: p.asrModel, translationModel: p.translationModel })
         return
       }
       case 'import': pickImport(); return
@@ -625,6 +627,7 @@ function wire(root: HTMLElement): () => void {
     switch (el.dataset.change) {
       case 'target': if (rec) { const value = el.value; el.value = rec.target; chooseTarget(rec, value, root) } break
       case 'prefTarget': recordingDraft.target = el.value; break
+      case 'prefSpoken': recordingDraft.spoken = el.value; break
       case 'keep': recordingDraft.keep = (el as HTMLInputElement).checked; break
       case 'style': setPref('style', el.value as SummaryStyle); break
       default:
@@ -810,12 +813,13 @@ export function mountSettings(el: HTMLElement): () => void {
     sig = next
     const row = (label: string, control: HTMLElement, hint?: string): HTMLElement => h('div', { class: 'dt-row' }, h('label', null, label, hint ? h('small', null, hint) : null), control)
     const sw = (key: 'keep' | 'autoSummary' | 'fix'): HTMLElement => h('input', { type: 'checkbox', class: 'dt-sw', 'data-pref': key, checked: p[key] })
-    const sel = (key: 'target' | 'partial' | 'style', options: Array<[string, string]>): HTMLElement => { const s = select('', options, String(p[key])); s.dataset.pref = key; return s }
+    const sel = (key: 'target' | 'spoken' | 'partial' | 'style', options: Array<[string, string]>): HTMLElement => { const s = select('', options, String(p[key])); s.dataset.pref = key; return s }
     const terms = Object.entries(p.terms)
     root.replaceChildren(
       h('div', { class: 'dt-set-h' }, t('setLayout')),
       h('div', { class: 'dt-cards', role: 'radiogroup' }, ...LAYOUTS.map(([id, key, hint]) => h('button', { type: 'button', role: 'radio', 'aria-checked': p.layout === id, class: `dt-card${p.layout === id ? ' on' : ''}`, 'data-layout': id },
         h('span', { class: `pic ${id}`, html: '<i></i><i></i><i></i>' }), h('b', null, t(key)), h('small', null, t(hint))))),
+      row(t('setSpoken'), sel('spoken', spokenOptions()), t('setSpokenHint')),
       row(t('setTarget'), sel('target', targetOptions()), ctx.tangu?.translate ? t('setTargetHint') : undefined),
       // 旧宿主没有专门的翻译口子,翻译时一直是顺带改的,没有可选的余地,这一行不出。
       ...(ctx.tangu?.translate ? [row(t('setFix'), sw('fix'), t('setFixHint'))] : []),

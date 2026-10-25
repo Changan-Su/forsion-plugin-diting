@@ -58,6 +58,7 @@ const ZH = {
   openTranscript: '在笔记里打开转写', reveal: '在文件夹里显示', rename: '改标题',
   target: '翻译成', targetOff: '不翻译', langZh: '中文', langEn: 'English', langJa: '日本語', langKo: '한국어', langFr: 'Français', langDe: 'Deutsch', langEs: 'Español',
   startTitle: '开始一次记录', startHint: '录下来，转成文字，需要的话同时翻译。过程中可以在右边随时提问。',
+  fieldSpoken: '说的是', spokenAuto: '自动判断', langYue: '粤语', setSpoken: '默认说的是', setSpokenHint: '只说一种语言的话选上它，识别会准很多；两种语言混着说才用自动判断。',
   fieldTitle: '标题', titlePlaceholder: '可以不填', fieldTarget: '翻译成', fieldKeep: '保留录音', keepHint: '保留以后可以点时间回听。录音存在你的笔记库里。',
   start: '开始记录', importFile: '导入音频或视频文件', untitled: '未命名记录',
   noVault: '需要先打开一个笔记库：转写、笔记和录音都存在库里。', noAsr: '转写没有成功：{e}', noMic: '麦克风打不开：{e}', micDenied: '没有麦克风权限。到 系统设置 › 隐私与安全性 › 麦克风 里允许 Forsion。',
@@ -143,6 +144,7 @@ const EN: typeof ZH = {
   openTranscript: 'Open transcript as a note', reveal: 'Show in folder', rename: 'Rename',
   target: 'Translate to', targetOff: 'No translation', langZh: '中文', langEn: 'English', langJa: '日本語', langKo: '한국어', langFr: 'Français', langDe: 'Deutsch', langEs: 'Español',
   startTitle: 'Start a recording', startHint: 'Record, turn speech into text and translate it as you go. Ask questions on the right at any time.',
+  fieldSpoken: 'Spoken language', spokenAuto: 'Detect automatically', langYue: 'Cantonese', setSpoken: 'Spoken language by default', setSpokenHint: 'Pick the language when only one is spoken; recognition gets much more accurate. Use Detect automatically only for mixed speech.',
   fieldTitle: 'Title', titlePlaceholder: 'Optional', fieldTarget: 'Translate to', fieldKeep: 'Keep the audio', keepHint: 'Keeping it lets you click a time to listen again. The audio is saved in your vault.',
   start: 'Start recording', importFile: 'Import an audio or video file', untitled: 'Untitled recording',
   noVault: 'Open a vault first: the transcript, notes and audio are saved there.', noAsr: 'Transcription failed: {e}', noMic: 'Could not open the microphone: {e}', micDenied: 'Microphone access is off. Allow Forsion under System Settings › Privacy & Security › Microphone.',
@@ -193,6 +195,10 @@ export function duration(sec: number): string {
 export const TARGETS: Array<{ id: string; key: Key; english: string }> = [
   { id: 'zh', key: 'langZh', english: 'Simplified Chinese' }, { id: 'en', key: 'langEn', english: 'English' }, { id: 'ja', key: 'langJa', english: 'Japanese' },
   { id: 'ko', key: 'langKo', english: 'Korean' }, { id: 'fr', key: 'langFr', english: 'French' }, { id: 'de', key: 'langDe', english: 'German' }, { id: 'es', key: 'langEs', english: 'Spanish' },
+]
+/** 说的是什么语言:交给识别当提示。只列本机 SenseVoice 认的几种(云端也都认);'' = 自动判断。 */
+export const SPOKEN: Array<{ id: string; key: Key }> = [
+  { id: '', key: 'spokenAuto' }, { id: 'zh', key: 'langZh' }, { id: 'en', key: 'langEn' }, { id: 'ja', key: 'langJa' }, { id: 'ko', key: 'langKo' }, { id: 'yue', key: 'langYue' },
 ]
 export const targetLabel = (id: string): string => { const x = TARGETS.find((l) => l.id === id); return x ? t(x.key) : t('targetOff') }
 export const targetEnglish = (id: string): string => TARGETS.find((l) => l.id === id)?.english || ''

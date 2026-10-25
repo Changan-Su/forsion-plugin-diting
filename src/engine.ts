@@ -48,7 +48,7 @@ const msg = (e: unknown): string => (e instanceof Error ? e.message : String(e))
 
 const TIMEOUT = 'speech recognition timed out'
 
-async function recognize(u: Utterance, choice = captureModel('asr', S.live?.asrModel)): Promise<string> {
+async function recognize(u: Utterance, choice = captureModel('asr', S.live?.asrModel), language = ''): Promise<string> {
   const captured = await choice
   if (captured.error || !captured.model) throw captured.error || new Error(t('modelUnavailable'))
   const model = captured.model
@@ -56,7 +56,7 @@ async function recognize(u: Utterance, choice = captureModel('asr', S.live?.asrM
   if (!fn) throw new Error('speech recognition is not available in this window')
   // 识别一直不回来(云端卡住)时不能把后面的句子全堵死。
   // ponytail: 这是兜底用的定时器,不推采集和转写;窗口隐藏时它会被降频,45 秒可能拖到一两分钟才到,只是晚一点放行。
-  const r = await Promise.race([fn({ audioBase64: base64(wavBytes(u.pcm, RATE)), mime: 'audio/wav', ...(ctx.tangu?.modelCatalog ? { backend: model.backend, ...(model.id && model.id !== 'local' ? { modelId: model.id } : {}) } : {}) }), sleep(45_000).then(() => { throw new Error(TIMEOUT) })])
+  const r = await Promise.race([fn({ audioBase64: base64(wavBytes(u.pcm, RATE)), mime: 'audio/wav', ...(language ? { language } : {}), ...(ctx.tangu?.modelCatalog ? { backend: model.backend, ...(model.id && model.id !== 'local' ? { modelId: model.id } : {}) } : {}) }), sleep(45_000).then(() => { throw new Error(TIMEOUT) })])
   return (typeof r === 'string' ? r : r?.text || '').trim()
 }
 
@@ -74,7 +74,7 @@ async function pump(): Promise<void> {
     let text = ''; let err: unknown = null
     // 窗口隐藏时定时器会被降频(几百毫秒能等成一分钟),所以隐藏时连着试,不等。
     for (let i = 0; i < 3; i++) {
-      try { text = await recognize(u, job.choice); err = null; break } catch (e) { err = e; if (msg(e) === TIMEOUT) break; if (i < 2 && !document.hidden) await sleep(700 * (i + 1)) }
+      try { text = await recognize(u, job.choice, rec.spoken); err = null; break } catch (e) { err = e; if (msg(e) === TIMEOUT) break; if (i < 2 && !document.hidden) await sleep(700 * (i + 1)) }
     }
     // 收尾等不及时队列会被清掉、这句已经记成「没转写成」;迟到的结果直接不要,更不能落进后来开始的那条记录里。
     if (queue[0] !== job) continue
@@ -136,7 +136,7 @@ function partial(): void {
   if (!cur) return
   lastPartial = slicer.seconds; partialBusy = true
   const partialRec = S.live; const selected = partialRec?.asrModel
-  recognize(cur, captureModel('asr', selected)).then((text) => { if (S.live === partialRec && S.live?.asrModel === selected && slicer?.speaking && !queue.length) S.partial = isJunk(text) ? '' : applyTerms(text, prefs().terms) }).catch(() => undefined).finally(() => { partialBusy = false })
+  recognize(cur, captureModel('asr', selected), partialRec?.spoken).then((text) => { if (S.live === partialRec && S.live?.asrModel === selected && slicer?.speaking && !queue.length) S.partial = isJunk(text) ? '' : applyTerms(text, prefs().terms) }).catch(() => undefined).finally(() => { partialBusy = false })
 }
 
 function resample(input: Float32Array, from: number): Float32Array {
@@ -145,7 +145,7 @@ function resample(input: Float32Array, from: number): Float32Array {
   return out
 }
 
-async function create(o: { title: string; target: string; source: Rec['source']; asrModel?: string; translationModel?: string }): Promise<Rec> {
+async function create(o: { title: string; target: string; spoken?: string; source: Rec['source']; asrModel?: string; translationModel?: string }): Promise<Rec> {
   if (!(await vaultReady())) throw new Error(t('noVault'))
   await init()
   const now = new Date()
@@ -153,7 +153,7 @@ async function create(o: { title: string; target: string; source: Rec['source'];
   // 同一分钟里同名的往后编号,直到列表里和盘上都没有这个文件夹:绝不写进一条已有的记录里。
   for (let n = 2; S.index.some((r) => r.folder === folder) || (await ctx.app.readFile(`${folder}/${FILES.record}`).catch(() => null)); n++) folder = `${base} ${n}`
   const rec = newRec({ id: `${now.getTime().toString(36)}${Math.random().toString(36).slice(2, 6)}`, folder, title: o.title.trim() || t('untitled'), now, source: o.source, target: o.target })
-  rec.asrModel = o.asrModel ?? prefs().asrModel; rec.translationModel = o.translationModel ?? prefs().translationModel
+  rec.spoken = o.spoken ?? prefs().spoken; rec.asrModel = o.asrModel ?? prefs().asrModel; rec.translationModel = o.translationModel ?? prefs().translationModel
   seq = 0; rmsAvg = 0; pendingMark = null; queue = []; chunks = []
   remember(rec)
   S.live = rec; S.open = rec; S.seconds = 0; S.partial = ''; S.error = ''; S.progress = 0
@@ -161,7 +161,7 @@ async function create(o: { title: string; target: string; source: Rec['source'];
   return rec
 }
 
-export async function start(o: { title?: string; target?: string; keep?: boolean; asrModel?: string; translationModel?: string } = {}): Promise<void> {
+export async function start(o: { title?: string; target?: string; spoken?: string; keep?: boolean; asrModel?: string; translationModel?: string } = {}): Promise<void> {
   if (S.phase !== 'idle') { ctx.notify?.(t('busy'), { level: 'warning' }); return }
   const p = prefs(); const my = epoch
   const alive = (): void => { if (my !== epoch) throw new Error('disposed') }
@@ -173,7 +173,7 @@ export async function start(o: { title?: string; target?: string; keep?: boolean
     alive()
     // 要等的事(问宿主用哪种识别、建文件夹)都放在开录之前:开录以后一步都不等,录音文件和时间轴才是同时起步的。
     const backend = (await resolveModel('asr', o.asrModel ?? p.asrModel)).backend || (await window.tangu?.getConfig?.().catch(() => null))?.asrBackend
-    const rec = await create({ title: o.title || '', target: o.target ?? p.target, source: 'mic', asrModel: o.asrModel, translationModel: o.translationModel })
+    const rec = await create({ title: o.title || '', target: o.target ?? p.target, spoken: o.spoken, source: 'mic', asrModel: o.asrModel, translationModel: o.translationModel })
     alive()
     stream = mic
     ac = new AudioContext({ sampleRate: RATE })
@@ -298,7 +298,7 @@ async function finish(rec: Rec, duration: number): Promise<void> {
 }
 
 /** 导入一个音频 / 视频文件:解码成 16 kHz 单声道,走和麦克风同一条路(切句 → 识别 → 翻译)。全程不出声。 */
-export async function importFile(file: File, options: { asrModel?: string; translationModel?: string; target?: string; keep?: boolean } = {}): Promise<void> {
+export async function importFile(file: File, options: { asrModel?: string; translationModel?: string; target?: string; spoken?: string; keep?: boolean } = {}): Promise<void> {
   if (S.phase !== 'idle') { ctx.notify?.(t('busy'), { level: 'warning' }); return }
   S.phase = 'starting'; S.error = ''; emit()
   let rec: Rec | null = null
@@ -312,7 +312,7 @@ export async function importFile(file: File, options: { asrModel?: string; trans
     for (let c = 0; c < buf.numberOfChannels; c++) { const ch = buf.getChannelData(c); for (let i = 0; i < ch.length; i++) pcm[i] += ch[i] / buf.numberOfChannels }
     const p = { ...prefs(), ...options }
     await resolveModel('asr', p.asrModel)
-    rec = await create({ title: file.name.replace(/\.[^.]+$/, ''), target: p.target, source: 'file', asrModel: p.asrModel, translationModel: p.translationModel })
+    rec = await create({ title: file.name.replace(/\.[^.]+$/, ''), target: p.target, spoken: p.spoken, source: 'file', asrModel: p.asrModel, translationModel: p.translationModel })
     if (p.keep && ctx.app.writeBytes) {
       const ext = (/\.([a-z0-9]{2,5})$/i.exec(file.name)?.[1] || 'audio').toLowerCase()
       rec.audio = `录音.${ext}`
@@ -340,7 +340,7 @@ export async function importFile(file: File, options: { asrModel?: string; trans
 // ── 对一条记录的修改(进行中的、看着的旧记录都走这里;别的窗口发来的操作也落到这里)──────────────────────────
 
 export type Cmd =
-  | { c: 'start'; title?: string; target?: string; keep?: boolean; asrModel?: string; translationModel?: string }
+  | { c: 'start'; title?: string; target?: string; spoken?: string; keep?: boolean; asrModel?: string; translationModel?: string }
   | { c: 'pause' } | { c: 'resume' } | { c: 'stop' }
   | { c: 'mark'; rec?: string; seg?: number }
   | { c: 'note'; rec: string; text: string; t: number }
@@ -418,7 +418,7 @@ export async function apply(cmd: Cmd): Promise<void> {
       const u = s.fail ? failed.get(failKey(rec, s.id)) : null
       if (u) {
         const choice = captureModel('asr', rec.asrModel)
-        try { const text = applyTerms(await recognize(u, choice), prefs().terms); if (!isJunk(text)) { s.text = text; s.asrModel = ctx.tangu?.modelCatalog ? (await choice).model || undefined : undefined; s.fail = undefined; failed.delete(failKey(rec, s.id)); S.error = ''; translate(rec, s) } } catch (e) { S.error = t('noAsr', { e: msg(e) }) }
+        try { const text = applyTerms(await recognize(u, choice, rec.spoken), prefs().terms); if (!isJunk(text)) { s.text = text; s.asrModel = ctx.tangu?.modelCatalog ? (await choice).model || undefined : undefined; s.fail = undefined; failed.delete(failKey(rec, s.id)); S.error = ''; translate(rec, s) } } catch (e) { S.error = t('noAsr', { e: msg(e) }) }
       } else if (s.text) { s.trState = undefined; translate(rec, s) }
       break
     }
