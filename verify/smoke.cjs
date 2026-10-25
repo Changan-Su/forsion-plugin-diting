@@ -314,8 +314,9 @@ async function main() {
     const wavSec = (bytes.length - 44) / 2 / 16000
     ok('导入文件:转成同样的记录,原文件拷进文件夹', imp.source === 'file' && imp.status === 'done' && imp.segments.length >= 3 && Math.abs(imp.duration - wavSec) < 2 && fs.existsSync(path.join(vault, impFolder, '录音.wav')), `${imp.segments.length} 句,${imp.duration} 秒(文件 ${wavSec.toFixed(1)} 秒):${imp.segments.slice(0, 2).map((s) => s.text).join(' / ')}`)
     // 钉了「说的是」:本机模型不许再逐句自己判语言(英文课被判成粤语 / 日语出乱码,10-25 实录)。没钉的时候只报数,当负对照看。
-    const foreign = imp.segments.filter((s) => (process.env.DITING_SPOKEN || 'en') === 'en' ? /[\u3040-\u30ff\u3400-\u9fff\uac00-\ud7af]/.test(s.text) : false)
-    if (process.env.DITING_SPOKEN) ok(`「说的是」= ${process.env.DITING_SPOKEN}:识别照着它出字`, imp.spoken === process.env.DITING_SPOKEN && (process.env.DITING_SPOKEN !== 'en' || foreign.length === 0), `${foreign.length}/${imp.segments.length} 句混进别的文字${foreign[0] ? ':' + foreign[0].text : ''}`)
+    // 看识别原文(raw):假引擎的「顺带纠正」会把每句第一个字换成「这」。
+    const foreign = imp.segments.filter((s) => (process.env.DITING_SPOKEN || 'en') === 'en' ? /[\u3040-\u30ff\u3400-\u9fff\uac00-\ud7af]/.test(s.raw || s.text) : false)
+    if (process.env.DITING_SPOKEN) ok(`「说的是」= ${process.env.DITING_SPOKEN}:识别照着它出字`, imp.spoken === process.env.DITING_SPOKEN && (process.env.DITING_SPOKEN !== 'en' || foreign.length === 0), `${foreign.length}/${imp.segments.length} 句混进别的文字${foreign[0] ? ':' + (foreign[0].raw || foreign[0].text) : ''}`)
     else console.log(`  (没钉语言:${foreign.length}/${imp.segments.length} 句混进中日韩文字)`)
     await shot('10-imported')
 

@@ -402,7 +402,7 @@ function startForm(): HTMLElement {
   return h('div', { class: 'dt-start' },
     h('h1', null, t('startTitle')), h('p', null, t('startHint')), h('div', { class: 'dt-model-controls' }),
     h('div', { class: 'dt-row' }, h('label', null, t('fieldTitle')), title),
-    h('div', { class: 'dt-row' }, h('label', null, t('fieldSpoken')), select('prefSpoken', spokenOptions(), p.spoken)),
+    h('div', { class: 'dt-row' }, h('label', null, t('fieldSpoken')), select('prefSpoken', spokenOptions(), p.spoken ?? prefs().spoken)),
     h('div', { class: 'dt-row' }, h('label', null, t('fieldTarget')), select('prefTarget', targetOptions(), p.target)),
     h('div', { class: 'dt-row' }, h('label', null, t('fieldKeep')), keep),
     h('div', { class: 'dt-row note' }, t('keepHint')),
