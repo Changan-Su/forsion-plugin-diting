@@ -4,7 +4,7 @@ import { on, prefs, S, setPref } from './state'
 import { supportsModels } from './models'
 import type { ChangeScope, Rec } from './model'
 
-const initialDraft = () => ({ title: '', target: prefs().target, keep: prefs().keep, asrModel: prefs().asrModel, translationModel: prefs().translationModel })
+const initialDraft = () => ({ title: '', target: prefs().target, spoken: prefs().spoken, keep: prefs().keep, asrModel: prefs().asrModel, translationModel: prefs().translationModel })
 export const recordingDraft = initialDraft()
 let submitted = false
 on(() => { if (S.phase === 'live' || S.phase === 'importing') submitted = true })
@@ -122,7 +122,7 @@ export function mountModelControls(host: HTMLElement, rec: Rec | null): () => vo
     } }); handles.push({ kind, mount })
   }
   const save = button(t('spaceDefaults'), () => {
-    setPref('asrModel', selected('asr')); setPref('translationModel', selected('translation')); setPref('target', currentRec()?.target ?? recordingDraft.target); ctx.notify?.(t('defaultsSaved'), { level: 'success' })
+    setPref('asrModel', selected('asr')); setPref('translationModel', selected('translation')); setPref('target', currentRec()?.target ?? recordingDraft.target); setPref('spoken', currentRec()?.spoken ?? recordingDraft.spoken); ctx.notify?.(t('defaultsSaved'), { level: 'success' })
   }, 'dt-config-link')
   const glossary = button(t('glossaryOpen'), () => showGlossary(host), 'dt-config-link')
   foot.append(el('span', t('modelScopeHint')), glossary, save)

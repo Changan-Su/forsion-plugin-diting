@@ -4,6 +4,7 @@
  *
  *   node build.mjs && node verify/smoke.cjs
  *   DITING_WAV=/path/to/16k-mono.wav node verify/smoke.cjs     # 换成真实录音(默认用系统的 say 合成几句中文)
+ *   DITING_SPOKEN=en …                                          # 钉「说的是」(英文录音给 en:导入的那条不许混进中日韩文字)
  *   DITING_TARGET=zh …                                          # 翻译成哪种语言(默认 en;英文录音要给 zh,不然不用翻)
  *   KEEP=1 …                                                    # 跑完留着临时目录
  *   HIDE_MS=330000 …                                            # 窗口隐藏那两段各等多久(默认 25 秒;超过 5 分钟才碰得到 Chromium 对长时间隐藏页面的重度降频)
@@ -160,7 +161,7 @@ async function main() {
     await mainWin('setContentSize', 1440, 900)
     await win.waitForTimeout(2000)
     // 合成的那几句是中文,翻成英文;换成真实录音时用 DITING_TARGET 指定(英文课要翻成中文就给 zh)。
-    await win.evaluate((target) => { localStorage.setItem('diting.test', '1'); localStorage.setItem('plugin.diting.workFolder', '谛听'); localStorage.setItem('plugin.diting.target', target) }, process.env.DITING_TARGET || 'en')
+    await win.evaluate(([target, spoken]) => { localStorage.setItem('diting.test', '1'); localStorage.setItem('plugin.diting.workFolder', '谛听'); localStorage.setItem('plugin.diting.target', target); if (spoken) localStorage.setItem('plugin.diting.spoken', spoken) }, [process.env.DITING_TARGET || 'en', process.env.DITING_SPOKEN || ''])
     await win.reload(); await win.waitForSelector('#root', { timeout: 30_000 }); await win.waitForTimeout(2500)
     for (const label of ['跳过引导', 'Skip']) { const b = win.locator(`text=${label}`).first(); if (await b.count().catch(() => 0)) { await b.click().catch(() => {}); break } }
     await win.waitForSelector('.dv-groupview', { timeout: 30_000 })
@@ -312,6 +313,10 @@ async function main() {
     const imp = JSON.parse(fs.readFileSync(path.join(vault, impFolder, '.record.json'), 'utf8'))
     const wavSec = (bytes.length - 44) / 2 / 16000
     ok('导入文件:转成同样的记录,原文件拷进文件夹', imp.source === 'file' && imp.status === 'done' && imp.segments.length >= 3 && Math.abs(imp.duration - wavSec) < 2 && fs.existsSync(path.join(vault, impFolder, '录音.wav')), `${imp.segments.length} 句,${imp.duration} 秒(文件 ${wavSec.toFixed(1)} 秒):${imp.segments.slice(0, 2).map((s) => s.text).join(' / ')}`)
+    // 钉了「说的是」:本机模型不许再逐句自己判语言(英文课被判成粤语 / 日语出乱码,10-25 实录)。没钉的时候只报数,当负对照看。
+    const foreign = imp.segments.filter((s) => (process.env.DITING_SPOKEN || 'en') === 'en' ? /[\u3040-\u30ff\u3400-\u9fff\uac00-\ud7af]/.test(s.text) : false)
+    if (process.env.DITING_SPOKEN) ok(`「说的是」= ${process.env.DITING_SPOKEN}:识别照着它出字`, imp.spoken === process.env.DITING_SPOKEN && (process.env.DITING_SPOKEN !== 'en' || foreign.length === 0), `${foreign.length}/${imp.segments.length} 句混进别的文字${foreign[0] ? ':' + foreign[0].text : ''}`)
+    else console.log(`  (没钉语言:${foreign.length}/${imp.segments.length} 句混进中日韩文字)`)
     await shot('10-imported')
 
     // ⑦ 主窗口收起来以后,从小窗开始一次新的(没有用户在主窗口里点过任何东西)

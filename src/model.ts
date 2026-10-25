@@ -37,6 +37,8 @@ export interface Rec {
   source: 'mic' | 'file'
   /** 翻译成什么;'' = 不翻译。 */
   target: string
+  /** 说的是什么语言(交给识别当提示);'' = 自动判断。 */
+  spoken?: string
   asrModel?: string
   translationModel?: string
   /** 录音的文件名(在 folder 里);没留就没有。 */
@@ -99,7 +101,7 @@ export function reviveRec(raw: unknown, folder: string): Rec | null {
   const num = (v: unknown): number => (typeof v === 'number' && Number.isFinite(v) ? v : 0)
   return {
     v: 1, id: r.id, folder, title: typeof r.title === 'string' ? r.title : '', createdAt: typeof r.createdAt === 'string' ? r.createdAt : new Date(0).toISOString(),
-    duration: num(r.duration), status: r.status === 'live' || r.status === 'paused' ? r.status : 'done', source: r.source === 'file' ? 'file' : 'mic', target: typeof r.target === 'string' ? r.target : '',
+    duration: num(r.duration), status: r.status === 'live' || r.status === 'paused' ? r.status : 'done', source: r.source === 'file' ? 'file' : 'mic', target: typeof r.target === 'string' ? r.target : '', spoken: typeof r.spoken === 'string' ? r.spoken : '',
     audio: typeof r.audio === 'string' ? r.audio : undefined,
     asrModel: typeof r.asrModel === 'string' ? r.asrModel : '', translationModel: typeof r.translationModel === 'string' ? r.translationModel : '', trLang: typeof r.trLang === 'string' ? r.trLang : r.target,
     segments: r.segments.filter((s) => s && typeof s.text === 'string').map((s, i) => ({ ...s, id: typeof s.id === 'number' ? s.id : i + 1, start: num(s.start), end: num(s.end) })),
