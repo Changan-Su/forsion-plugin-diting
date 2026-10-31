@@ -7,9 +7,9 @@ async function main() {
   const { startStubEngine } = require(path.join(desktop, 'scripts/lib/stub-engine.cjs'))
   const stub = await startStubEngine()
   const userData = path.join(home, 'userdata')
-  for (const d of [userData, userData + '-dev']) fs.writeFileSync(path.join(d, 'tangu-desktop-config.json'), JSON.stringify({ mode: 'external', backendUrl: stub.url, token: 'fixture', modelId: 'm1' }))
   let app
   try {
+    for (const d of [userData, userData + '-dev']) fs.writeFileSync(path.join(d, 'tangu-desktop-config.json'), JSON.stringify({ mode: 'external', backendUrl: stub.url, token: 'fixture', modelId: 'm1' }))
     app = await electron.launch({ args: [`--user-data-dir=${userData}`, '--lang=zh-CN', desktop], cwd: desktop, env: { ...process.env, TANGU_HOME: home, TANGU_BACKEND_URL: stub.url, TANGU_HARNESS_QUIET: '1' } })
     const win = await app.firstWindow()
     await require(path.join(desktop, 'scripts/lib/skip-onboarding.cjs')).skipOnboarding(win)
@@ -26,6 +26,6 @@ async function main() {
         return { zoom: getComputedStyle(document.body).zoom, active: s?.activeIds, views: s?.views.map(v => `${v.pluginId}:${v.item.id}`), hasView: !!getView?.('plugin:diting:session'), registry: registry?.spaces.map(x => x.id), diskSpaces: (await window.tangu.spacesList()).map(x => ({slug:x.slug,plugin:x.plugin})), health: localStorage.getItem('forsion_plugin_space_health'), spaces: [...document.querySelectorAll('.rb-space')].map(x => x.getAttribute('aria-label')) }
       })))
     }
-  } finally { await app?.close(); await stub.close() }
+  } finally { try { await app?.close() } finally { await stub.close() } }
 }
 main().catch(e => { console.error(e); process.exitCode = 1 })

@@ -33,3 +33,20 @@ node verify/smoke.cjs
 
 用户暂不能配合真实麦克风说话、拔插与权限弹窗，相关项目仍未验，issue #1 保持开放。GUI 工具后因无法可靠确认 Windows 浏览器 URL 终止，本轮未绕过限制或关闭缺证据的 issue。
 
+# 2026-10-31：无渲染器调试连接的后台长测
+
+宿主修复已通过五项 PR CI 并合并为 Genesis `b6d98da68479655b0db5caf6da61441ab928e0cb`（#179）。当前两块物理屏幕均为 125%，没有可用的 150% 屏幕。插件 production bundle 不变。
+
+新增 `npm run check:windows-background`：复用隔离 profile、文件麦克风、真实离线 SenseVoice，只连接主进程 inspector，完全不连接渲染器 CDP。三个后台场景分别至少 330 秒，先验证场景真实成立才等待，保留原生窗口状态、document visibility、PCM 回调、AudioContext、转写及落盘证据。
+
+- 实际最小化、页面 hidden：330.092 秒墙钟，转写推进 327.940 秒，2→60 句；最终落盘 61 条非空成功识别，0 条失败。
+- 点击实际笔记 Space 并确认它激活：330.533 秒墙钟，推进 329.480 秒，2→60 句。
+- 实际关闭主窗收进托盘、页面 hidden：330.086 秒墙钟，推进 329.220 秒，60→118 句；收尾落盘 119 条非空成功识别，0 条失败。
+- 上述长测通过独立磁盘文字审计：状态 done，后台区间有真实非空识别文字，成功条数不少于取样条数；没有用空白失败段冒充识别成功。最终仪器进一步只计成功非空识别，并逐条比较停止前文字是否保留。
+- 当前 main 的完整 smoke 41/42：媒体导入、缩放、Mini、强退恢复均通过；唯一失败项是旧 CDP 流程页面保持 visible 的严格 hidden 前提。该失败保留；上面的无 CDP 原生长测单独给出证据，未降低旧断言。
+- GPT-6.1-sol 聚焦评审指出失败识别误计数和 reload probe 异常泄漏服务两项 P2，均已修正。缺失 profile 的负向实测以 exit 1 及时退出，没有残留监听服务器。
+
+复跑时沿用前文 `FORSION_DESKTOP` / `DITING_MODEL` / `DITING_WAV` / `DITING_TARGET`，设置 `HIDE_MS=330000`；默认三项全跑，也可设 `WINDOWS_BACKGROUND_CASE=space,minimize,close` 选择项目。短诊断可缩短 HIDE_MS，不能据此声称超过五分钟。局部原始证据位于 `verify/.out/windows-native-diagnostic-1031`、`windows-native-space-tray-1031` 和 `background-text-audit-1031.log`。
+
+用户本轮再次确认暂不能配合真实麦克风，因此权限、现场说话、拔插仍保留，issue #1 不能据文件麦克风验收关闭。
+

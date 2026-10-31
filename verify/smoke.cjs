@@ -33,6 +33,7 @@ const { startStubEngine } = require(path.join(DESK, 'scripts/lib/stub-engine.cjs
 const { synthMic } = require(path.join(DESK, 'scripts/lib/voice-fixture.cjs'))
 
 const SHOTS = process.env.SHOTS || path.join(HERE, '.shots'); fs.mkdirSync(SHOTS, { recursive: true })
+const NATIVE_ONLY = process.env.WINDOWS_NATIVE_AUDIO_ONLY === '1' || process.argv.includes('--native-background')
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
 const freePort = () => new Promise((r) => { const s = net.createServer(); s.listen(0, '127.0.0.1', () => { const p = s.address().port; s.close(() => r(p)) }) })
 const results = []
@@ -131,7 +132,7 @@ async function main() {
   // (desktop 的 scripts/lib/voice-fixture.cjs 记过)。主进程那头(隐藏 / 关闭窗口)走 --inspect。
   const port = await freePort(); const iport = await freePort()
   const launchDesktop = () => {
-    const child = spawn(require(path.join(DESK, 'node_modules/electron')), [...mic, `--remote-debugging-port=${port}`, `--inspect=${iport}`, `--user-data-dir=${userData}`, '--lang=zh-CN', DESK, ...MAC_FLAGS], {
+    const child = spawn(require(path.join(DESK, 'node_modules/electron')), [...mic, ...(NATIVE_ONLY ? [] : [`--remote-debugging-port=${port}`]), `--inspect=${iport}`, `--user-data-dir=${userData}`, '--lang=zh-CN', DESK, ...MAC_FLAGS], {
       cwd: DESK, env: workspaceEnv({ ...process.env, TANGU_HOME: home, TANGU_BACKEND_URL: stub.url, TANGU_HARNESS_QUIET: '1' }), stdio: ['ignore', 'pipe', 'pipe'],
     })
     for (const output of [child.stdout, child.stderr]) output.on('data', data => fs.appendFileSync(path.join(home, 'desktop.log'), data))
@@ -163,6 +164,14 @@ async function main() {
   const consoleErrors = []
   const pages = () => (browser ? browser.contexts().flatMap((c) => c.pages()) : [])
   try {
+    if (NATIVE_ONLY) {
+      for (let i = 0; i < 100 && !mainUrl; i++) {
+        mainUrl = await mainEval(`(async () => { const { BrowserWindow } = process.mainModule.require('electron'); return BrowserWindow.getAllWindows().map(w => w.webContents.getURL()).find(url => url.startsWith('file:') && !/[?&]window=/.test(url))?.split('#')[0] || '' })()`).catch(() => '')
+        if (!mainUrl) await sleep(300)
+      }
+      if (!mainUrl) throw new Error('30 秒没找到原生主窗口')
+      await require('./native-background.cjs')({ inMain, mainWin, home, vault, SHOTS, ok })
+    } else {
     let win = await attach()
     if (process.env.AUDIO_PROBE) await win.addInitScript(() => {
       // Observe the native callback without replacing its data or scheduling.
@@ -309,11 +318,11 @@ async function main() {
       // 页面知道自己被隐藏要一点时间:最多等 10 秒,等不到就照实记「没隐藏」。
       let mid = await probe(); for (let i = 0; i < 20 && mid.hidden !== 'hidden'; i++) { await sleep(500); mid = await probe() }
       await sleep(HIDE_MS)
-      const b = await probe(); const native = await inMain('return { visible: w.isVisible(), minimized: w.isMinimized() }'); const shown = native.visible; const wall = (Date.now() - t0) / 1000
+      const b = await probe(); const native = await inMain('return { visible: w.isVisible(), minimized: w.isMinimized(), throttling: w.webContents.getBackgroundThrottling() }'); const shown = native.visible; const wall = (Date.now() - t0) / 1000
       if (op === 'minimize') await mainWin('restore')
       await mainWin('showInactive'); await sleep(800)
       const adv = b.seconds - a.seconds
-      ok(name, (strict ? mid.hidden === 'hidden' && b.hidden === 'hidden' : true) && (op === 'minimize' ? native.minimized : shown === false) && adv > wall * 0.9 && b.segs > mid.segs && b.phase === 'live', `页面可见性=${mid.hidden}→${b.hidden},窗口可见=${shown},最小化=${native.minimized};墙上 ${wall.toFixed(0)} 秒,时间轴走了 ${adv.toFixed(1)} 秒,句子 ${a.segs} → ${b.segs}${b.error ? `;报错 ${b.error}` : ''}`)
+      ok(name, (strict ? mid.hidden === 'hidden' && b.hidden === 'hidden' : true) && (op === 'minimize' ? native.minimized : shown === false) && adv > wall * 0.9 && b.segs > mid.segs && b.phase === 'live', `页面可见性=${mid.hidden}→${b.hidden},窗口可见=${shown},最小化=${native.minimized},throttling=${native.throttling};墙上 ${wall.toFixed(0)} 秒,时间轴走了 ${adv.toFixed(1)} 秒,句子 ${a.segs} → ${b.segs}${b.error ? `;报错 ${b.error}` : ''}`)
       await audioProbe(name)
     }
     await away(process.env.WINDOWS_EXTENDED ? '主窗口实际最小化时继续录' : '窗口隐藏时继续录', process.env.WINDOWS_EXTENDED ? 'minimize' : 'hide', true)
@@ -463,6 +472,7 @@ async function main() {
     }
     }
     ok('页面没有抛错', errors.length === 0, errors.slice(0, 3).join(' | '))
+    }
   } catch (e) {
     failed = e
     for (const [i, page] of pages().entries()) {
