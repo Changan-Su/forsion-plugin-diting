@@ -1,2 +1,4 @@
 # CSS is embedded verbatim in the generated JavaScript bundle.
 *.css text eol=lf
+# The release check compares the committed bundle against esbuild's LF output.
+/main.js text eol=lf
